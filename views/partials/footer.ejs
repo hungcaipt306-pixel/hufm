@@ -1,1 +1,20 @@
-</main><footer>Hệ thống quản lý rừng — Chi cục Kiểm lâm thành phố Huế</footer></body></html>
+</main>
+<footer>Chi cục Kiểm lâm thành phố Huế</footer>
+<script>
+(() => {
+  const toggle = document.getElementById('menuToggle');
+  const nav = document.getElementById('mainNav');
+  if (!toggle || !nav) return;
+  toggle.addEventListener('click', () => {
+    const open = nav.classList.toggle('open');
+    toggle.setAttribute('aria-expanded', String(open));
+    document.body.classList.toggle('nav-open', open);
+  });
+  nav.querySelectorAll('a').forEach(link => link.addEventListener('click', () => {
+    nav.classList.remove('open');
+    toggle.setAttribute('aria-expanded', 'false');
+    document.body.classList.remove('nav-open');
+  }));
+})();
+</script>
+</body></html>

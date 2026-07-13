@@ -1,4 +1,38 @@
-<%- include('partials/header',{title:'Bản đồ số',mapPage:true}) %><div class="page-head"><div><h1>Bản đồ quản lý rừng</h1><p>OpenStreetMap • định vị nhanh • waypoint • tracklog</p></div><a class="button" href="/api/export/geojson">Tải GeoJSON</a></div>
-<div class="map-layout"><aside class="map-tools"><button id="locateBtn" class="primary">📍 Định vị nhanh</button><button id="addWpBtn">➕ Lưu waypoint tại vị trí hiện tại</button><button id="startTrackBtn">▶ Bắt đầu ghi tracklog</button><button id="stopTrackBtn" disabled>⏹ Dừng và lưu tracklog</button><div id="status" class="status">Sẵn sàng.</div><hr><h3>Dữ liệu hiển thị</h3><div id="dataList" class="data-list"></div></aside><div id="map"></div></div>
-<div id="modal" class="modal hidden"><div class="modal-box"><h3 id="modalTitle">Lưu dữ liệu</h3><label>Tên<input id="itemName"></label><label>Mô tả<textarea id="itemDescription"></textarea></label><label id="categoryWrap">Phân loại<select id="itemCategory"><option>Chốt bảo vệ rừng</option><option>Khu vực nguy cơ</option><option>Dấu vết vi phạm</option><option>Điểm tuần tra</option><option>Khác</option></select></label><div class="actions"><button id="cancelModal">Hủy</button><button id="saveModal" class="primary">Lưu</button></div></div></div>
-<script>window.APP_USER=<%- JSON.stringify(currentUser) %>;</script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="/map.js"></script><%- include('partials/footer') %>
+<%- include('partials/header',{title:'Bản đồ số',mapPage:true}) %>
+<div class="page-head map-head"><div><h1>Bản đồ quản lý rừng</h1><p>OpenStreetMap • định vị nhanh • waypoint • tracklog</p></div><a class="button compact-button" href="/api/export/geojson">Tải GeoJSON</a></div>
+<div class="map-layout">
+  <aside class="map-tools" id="mapTools">
+    <div class="mobile-tool-handle" aria-hidden="true"></div>
+    <div class="map-actions-grid">
+      <button id="locateBtn" class="primary">📍 Định vị</button>
+      <button id="addWpBtn">➕ Waypoint</button>
+      <button id="startTrackBtn">▶ Ghi tracklog</button>
+      <button id="stopTrackBtn" disabled>⏹ Dừng và lưu</button>
+    </div>
+    <div id="status" class="status" role="status" aria-live="polite">Sẵn sàng.</div>
+    <details class="data-panel" open><summary>Dữ liệu hiển thị</summary><div id="dataList" class="data-list"></div></details>
+    <details class="data-panel fire-panel" open>
+      <summary>🔥 Cảnh báo cháy rừng thành phố Huế</summary>
+      <div class="fire-controls">
+        <label>Địa bàn phường/xã<select id="fireWard"><option value="">Toàn thành phố Huế</option></select></label>
+        <div class="fire-actions"><button id="refreshFireBtn" type="button" class="primary">Làm mới cảnh báo</button><a id="openPcccrBtn" class="button" href="https://v2.pcccr.vn/diem-chay" target="_blank" rel="noopener noreferrer">Mở bản đồ PCCCR</a></div>
+      </div>
+      <div id="fireStatus" class="source-note">Đang kiểm tra nguồn cảnh báo…</div>
+      <div class="fire-legend"><span class="fire-dot"></span> Điểm nghi ngờ/cháy từ nguồn PCCCR đã cấu hình</div>
+    </details>
+    <details class="data-panel layer-panel" open>
+      <summary>Lớp bản đồ tải lên</summary>
+      <form id="layerUploadForm" class="layer-upload-form" enctype="multipart/form-data">
+        <label>Tên lớp<input id="layerName" name="name" placeholder="Tự lấy theo tên tệp"></label>
+        <label>Tệp bản đồ<input id="layerFile" name="file" type="file" accept=".geojson,.json,.kml,.mbtiles" required></label>
+        <label>Mô tả<textarea id="layerDescription" name="description" placeholder="Thông tin lớp bản đồ"></textarea></label>
+        <button class="primary" type="submit">⬆ Tải lớp lên</button>
+        <small>Hỗ trợ GeoJSON, KML và MBTiles. Giới hạn mặc định 50 MB.</small>
+      </form>
+      <div id="layerList" class="data-list layer-list"></div>
+    </details>
+  </aside>
+  <div id="map" aria-label="Bản đồ quản lý rừng"></div>
+</div>
+<div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-box"><h3 id="modalTitle">Lưu dữ liệu</h3><label>Tên<input id="itemName"></label><label>Mô tả<textarea id="itemDescription"></textarea></label><label id="categoryWrap">Phân loại<select id="itemCategory"><option>Chốt bảo vệ rừng</option><option>Khu vực nguy cơ</option><option>Dấu vết vi phạm</option><option>Điểm tuần tra</option><option>Khác</option></select></label><div class="actions"><button id="cancelModal">Hủy</button><button id="saveModal" class="primary">Lưu</button></div></div></div>
+<script>window.APP_USER=<%- JSON.stringify(currentUser) %>;</script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script><script src="/map.js"></script><%- include('partials/footer') %>

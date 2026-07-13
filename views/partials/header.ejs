@@ -1,6 +1,30 @@
-<!doctype html><html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title><%= title || 'Quản lý rừng Huế' %></title><link rel="stylesheet" href="/style.css">
-<% if (typeof mapPage !== 'undefined' && mapPage) { %><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"><% } %>
-</head><body>
-<header class="topbar"><a class="brand" href="/dashboard">🌲 Kiểm lâm Huế</a><% if(currentUser){ %><nav><a href="/dashboard">Tổng quan</a><a href="/map">Bản đồ</a><% if(currentUser.role==='admin'){ %><a href="/admin/users">Người dùng</a><a href="/admin/groups">Nhóm</a><% } %><% if(currentUser.role==='mod'){ %><a href="/group/members">Thành viên nhóm</a><% } %><form method="post" action="/logout"><button class="link-btn">Đăng xuất</button></form></nav><% } %></header>
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#123d2a">
+  <title><%= title || 'Quản lý rừng Huế' %></title>
+  <link rel="icon" type="image/png" href="/favicon.png">
+  <link rel="stylesheet" href="/style.css">
+  <% if (typeof mapPage !== 'undefined' && mapPage) { %>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <% } %>
+</head>
+<body class="<%= typeof mapPage !== 'undefined' && mapPage ? 'map-page' : '' %>">
+<header class="topbar">
+  <div class="topbar-inner">
+    <a class="brand" href="<%= currentUser ? '/dashboard' : '/' %>"><img class="brand-logo" src="/logo-kiem-lam-hue.png" alt="Logo Kiểm lâm Huế"><span><strong>Quản lý rừng</strong><small>Chi cục Kiểm lâm TP Huế</small></span></a>
+    <% if(currentUser){ %>
+      <button class="menu-toggle" id="menuToggle" type="button" aria-label="Mở menu" aria-expanded="false" aria-controls="mainNav"><span></span><span></span><span></span></button>
+      <nav id="mainNav" class="main-nav">
+        <a href="/dashboard">Tổng quan</a>
+        <a href="/map">Bản đồ</a>
+        <% if(currentUser.role==='admin'){ %><a href="/admin/users">Người dùng</a><a href="/admin/groups">Nhóm</a><% } %>
+        <% if(currentUser.role==='mod'){ %><a href="/group/members">Thành viên nhóm</a><% } %>
+        <form method="post" action="/logout"><button class="link-btn">Đăng xuất</button></form>
+      </nav>
+    <% } %>
+  </div>
+</header>
 <main class="container"><% if(flash){ %><div class="flash <%= flash.type %>"><%= flash.message %></div><% } %>
