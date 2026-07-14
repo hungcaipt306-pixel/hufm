@@ -1,5 +1,39 @@
 <%- include('partials/header',{title:'Quản lý người dùng'}) %>
-<div class="page-head"><div><h1>Quản lý người dùng</h1><p>Duyệt đăng ký, phân vai trò và gán nhóm.</p></div></div>
+<div class="page-head"><div><h1>Quản lý người dùng</h1><p>Tạo tài khoản trực tiếp, nhập hàng loạt từ CSV, duyệt đăng ký và phân quyền.</p></div></div>
+
+<section class="admin-user-tools">
+  <article class="panel account-create-card">
+    <div class="section-heading"><div><h2>Tạo tài khoản</h2><p>Tài khoản do Admin tạo được kích hoạt ngay.</p></div><span class="badge approved">user / mod</span></div>
+    <form method="post" action="/admin/users/create" class="admin-account-form">
+      <label>Họ và tên<input name="name" required maxlength="120" autocomplete="off"></label>
+      <label>Email<input name="email" type="email" required autocomplete="off"></label>
+      <label>Mật khẩu ban đầu<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
+      <label>Vai trò<select name="role"><option value="user">User</option><option value="mod">Mod quản lý nhóm</option></select></label>
+      <label>Nhóm<select name="groupId"><option value="">Chưa thuộc nhóm</option><% groups.forEach(g=>{ %><option value="<%=g.id%>"><%=g.name%></option><% }) %></select></label>
+      <label>Điện thoại<input name="phone" autocomplete="off"></label>
+      <label class="wide-field">Đơn vị<input name="unit" autocomplete="off"></label>
+      <button class="primary wide-field" type="submit">＋ Tạo tài khoản</button>
+    </form>
+  </article>
+
+  <article class="panel csv-import-card">
+    <div class="section-heading"><div><h2>Nhập tài khoản từ CSV</h2><p>Tối đa 1.000 tài khoản mỗi lần. Chỉ tạo vai trò user hoặc mod.</p></div></div>
+    <div class="csv-actions"><a class="button" href="/templates/mau-tai-khoan-hufm.csv" download>⇩ Tải CSV mẫu</a></div>
+    <form method="post" action="/admin/users/import" enctype="multipart/form-data" class="csv-upload-form">
+      <label>Chọn file CSV<input name="csvFile" type="file" accept=".csv,text/csv" required></label>
+      <button class="primary" type="submit">⇧ Kiểm tra và tạo tài khoản</button>
+    </form>
+    <p class="csv-note"><b>Cột bắt buộc:</b> name, email, password. <b>Cột tùy chọn:</b> role, phone, unit, group_name, status. Tên nhóm phải có sẵn trong HUFM.</p>
+  </article>
+</section>
+
+<% if(importResult){ %>
+<section class="panel import-report">
+  <div class="section-heading"><div><h2>Kết quả nhập CSV</h2><p>Đã tạo <b><%=importResult.created.length%></b>/<%=importResult.total%> tài khoản; bỏ qua <b><%=importResult.skipped.length%></b> dòng.</p></div></div>
+  <% if(importResult.skipped.length){ %><div class="import-errors"><table><thead><tr><th>Dòng</th><th>Email</th><th>Lý do bỏ qua</th></tr></thead><tbody><% importResult.skipped.forEach(item=>{ %><tr><td><%=item.line%></td><td><%=item.email%></td><td><%=item.reason%></td></tr><% }) %></tbody></table></div><% } %>
+</section>
+<% } %>
+
 <section class="table-wrap responsive-table"><table><thead><tr><th>Thành viên</th><th>Trạng thái</th><th>Vai trò/nhóm</th><th>Thông tin</th><th>Thao tác</th></tr></thead><tbody>
 <% users.forEach(u=>{ const formId='user-update-'+u.id; %><tr>
 <td data-label="Thành viên"><b><%= u.name %></b><br><small><%= u.email %></small></td>

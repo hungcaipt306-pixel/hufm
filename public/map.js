@@ -3,11 +3,25 @@ if (typeof window.L === 'undefined') {
   if (mapEl) mapEl.innerHTML = '<div class="map-load-error"><b>Không tải được thư viện bản đồ.</b><br>Hãy bấm “Cập nhật app”, tải lại trang hoặc kiểm tra kết nối.</div>';
   throw new Error('Leaflet chưa được tải');
 }
-const map = L.map('map', { zoomControl:true, preferCanvas:true }).setView([16.4637, 107.5909], 11);
-window.addEventListener('load', () => setTimeout(() => map.invalidateSize(true), 150));
+const map = L.map('map', { zoomControl:true, preferCanvas:true, zoomAnimation:true, fadeAnimation:true, markerZoomAnimation:true }).setView([16.4637, 107.5909], 11);
+const mapLoading=document.getElementById('mapLoading');
+const hideMapLoading=()=>mapLoading?.classList.add('is-hidden');
+const showMapLoading=(message='Đang tải bản đồ…')=>{if(mapLoading){mapLoading.querySelector('b').textContent=message;mapLoading.classList.remove('is-hidden');}};
+window.addEventListener('load', () => setTimeout(() => map.invalidateSize(true), 180));
 window.addEventListener('resize', () => map.invalidateSize(false));
-const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap contributors' }).addTo(map);
-const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom:17, attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap' });
+if('ResizeObserver' in window){new ResizeObserver(()=>map.invalidateSize(false)).observe(document.getElementById('map'));}
+const tileOptions={maxZoom:19,updateWhenIdle:false,keepBuffer:4,crossOrigin:true,attribution:'&copy; OpenStreetMap contributors'};
+const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', tileOptions).addTo(map);
+const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { ...tileOptions,maxZoom:17,attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap' });
+let streetTileErrors=0,topoTileErrors=0,fallbackActivated=false;
+streetLayer.on('loading',()=>showMapLoading('Đang tải bản đồ nền…'));
+streetLayer.on('tileload',()=>{streetTileErrors=0;hideMapLoading();});
+streetLayer.on('load',hideMapLoading);
+streetLayer.on('tileerror',()=>{streetTileErrors++;if(streetTileErrors>=4&&!fallbackActivated){fallbackActivated=true;map.removeLayer(streetLayer);topoLayer.addTo(map);showMapLoading('Đang chuyển sang bản đồ địa hình dự phòng…');status('Nguồn bản đồ đường phố phản hồi chậm, đã chuyển sang địa hình dự phòng.');}});
+topoLayer.on('tileload',()=>{topoTileErrors=0;hideMapLoading();});
+topoLayer.on('load',hideMapLoading);
+topoLayer.on('tileerror',()=>{topoTileErrors++;if(topoTileErrors>=5){hideMapLoading();status('Không tải được bản đồ nền. Kiểm tra Internet rồi bấm Cập nhật.');}});
+setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-tile-loaded'))hideMapLoading();},900);
 
 const waypointLayer = L.layerGroup().addTo(map);
 const trackLayer = L.layerGroup().addTo(map);
@@ -344,24 +358,28 @@ document.getElementById('saveModal').onclick=async()=>{
   catch(e){await queueRecord(type,payload);modal.classList.add('hidden');status('Mất kết nối: dữ liệu đã được lưu an toàn trên thiết bị.');await updateNetworkUI();await loadData();}
 };
 
-document.getElementById('reloadDataBtn').onclick=async()=>{status('Đang tải lại waypoint và tracklog...');try{await loadData();status('Đã cập nhật dữ liệu bản đồ.');}catch(e){status(e.message);}};
-document.getElementById('reloadLayersBtn').onclick=async()=>{status('Đang tải lại các lớp bản đồ...');try{await loadLayers();status('Đã cập nhật lớp bản đồ.');document.querySelector('.layer-panel')?.setAttribute('open','');}catch(e){status(e.message);}};
+function showToast(message){const toast=document.getElementById('appToast');if(!toast)return;toast.textContent=message;toast.classList.add('show');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>toast.classList.remove('show'),2200);}
+document.getElementById('reloadLayersBtn').onclick=async()=>{status('Đang tải lại các lớp bản đồ...');try{await loadLayers();map.invalidateSize(true);status('Đã cập nhật lớp bản đồ.');showToast('Đã cập nhật lớp bản đồ');}catch(e){status(e.message);}};
 document.getElementById('updateAppBtn').onclick=async()=>{
   const btn=document.getElementById('updateAppBtn');
-  btn.disabled=true; status('Đang kiểm tra phiên bản HUFM mới...');
+  btn.disabled=true;btn.classList.add('is-spinning');status('Đang cập nhật dữ liệu và bản đồ...');showMapLoading('Đang cập nhật bản đồ…');
   try{
+    await Promise.allSettled([loadData(),loadLayers(),loadFireWeather(false),loadFireAlerts()]);
+    streetTileErrors=0;topoTileErrors=0;fallbackActivated=false;
+    if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer))streetLayer.addTo(map);
+    if(map.hasLayer(streetLayer))streetLayer.redraw();
+    if(map.hasLayer(topoLayer))topoLayer.redraw();
+    map.invalidateSize(true);
     if('serviceWorker' in navigator){
       const reg=await navigator.serviceWorker.getRegistration();
       await reg?.update();
-      if(reg?.waiting) reg.waiting.postMessage({type:'SKIP_WAITING'});
-      else reg?.active?.postMessage({type:'CLEAR_APP_CACHE'});
-      await new Promise(r=>setTimeout(r,700));
+      reg?.active?.postMessage({type:'CLEAR_APP_CACHE'});
     }
-    status('Đã cập nhật tài nguyên ứng dụng. Đang tải lại...');
-    location.reload();
-  }catch(e){status(`Không thể cập nhật: ${e.message}`);btn.disabled=false;}
+    await new Promise(r=>setTimeout(r,550));
+    hideMapLoading();status('Đã cập nhật lại dữ liệu và bản đồ.');showToast('Đã cập nhật lại');
+  }catch(e){hideMapLoading();status(`Không thể cập nhật: ${e.message}`);showToast('Cập nhật chưa thành công');}
+  finally{btn.disabled=false;btn.classList.remove('is-spinning');}
 };
-if('serviceWorker' in navigator){navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload());}
 
 document.getElementById('layerUploadForm').addEventListener('submit', async event => {
   event.preventDefault();

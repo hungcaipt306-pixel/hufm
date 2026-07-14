@@ -186,3 +186,117 @@
   .hufm-compact-layer-control .leaflet-control-layers-list{width:188px;max-height:38dvh}
   .hufm-compact-layer-control label{font-size:.74rem!important;padding:4px 3px!important}
 }
+
+/* HUFM UI refinement: smooth scrollable tool drawer and modern map controls */
+.map-page .ifmc-drawer{
+  overflow:hidden!important;
+  display:flex!important;
+  flex-direction:column!important;
+  padding-bottom:0!important;
+  background:rgba(250,252,251,.97);
+  border:1px solid rgba(18,61,42,.08);
+}
+.map-page .drawer-title{
+  position:relative!important;
+  flex:0 0 auto;
+  margin-bottom:0!important;
+  box-shadow:0 1px 0 rgba(255,255,255,.08);
+}
+.drawer-scroll{
+  min-height:0;
+  flex:1 1 auto;
+  overflow-y:auto;
+  overflow-x:hidden;
+  padding:12px 12px max(16px,env(safe-area-inset-bottom));
+  margin:0 -13px;
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  -webkit-overflow-scrolling:touch;
+  overscroll-behavior-y:contain;
+  scroll-behavior:smooth;
+  scrollbar-gutter:stable;
+  scrollbar-width:thin;
+  scrollbar-color:#79a08c transparent;
+}
+.drawer-scroll::-webkit-scrollbar{width:6px}
+.drawer-scroll::-webkit-scrollbar-track{background:transparent}
+.drawer-scroll::-webkit-scrollbar-thumb{background:#79a08c;border-radius:999px}
+.drawer-scroll::-webkit-scrollbar-thumb:hover{background:#517d67}
+.map-page .data-panel{
+  flex:0 0 auto;
+  box-shadow:0 3px 12px rgba(18,61,42,.045);
+  transition:box-shadow .2s ease,border-color .2s ease,transform .2s ease;
+}
+.map-page .data-panel[open]{border-color:#cbdad2;box-shadow:0 6px 18px rgba(18,61,42,.075)}
+.map-page .data-panel summary{
+  position:relative!important;
+  top:auto!important;
+  list-style:none;
+  display:flex;
+  align-items:center;
+  gap:8px;
+  min-height:42px;
+  user-select:none;
+}
+.map-page .data-panel summary::-webkit-details-marker{display:none}
+.map-page .data-panel summary:before{content:'›';font-size:1.2rem;line-height:1;transform:rotate(0);transition:transform .2s ease;color:#2b6e50}
+.map-page .data-panel[open] summary:before{transform:rotate(90deg)}
+.map-page .data-panel>*:not(summary){margin-left:10px;margin-right:10px}
+.map-page .data-panel>*:last-child{margin-bottom:10px}
+.map-page .status{background:linear-gradient(135deg,#eef6f1,#f8fbf9);border:1px solid #dbe8e0}
+.map-page .network-bar{background:#fff;border:1px solid #dbe4df;box-shadow:0 2px 8px rgba(18,61,42,.04)}
+
+.map-loading{
+  position:absolute;inset:0;z-index:610;display:flex;align-items:center;justify-content:center;gap:10px;
+  background:linear-gradient(135deg,#eef3f0,#e4ece8);color:#315745;pointer-events:none;
+  transition:opacity .35s ease,visibility .35s ease;
+}
+.map-loading.is-hidden{opacity:0;visibility:hidden}
+.map-loading span{width:22px;height:22px;border:3px solid #b7cec1;border-top-color:#17613f;border-radius:50%;animation:hufmSpin .8s linear infinite}
+@keyframes hufmSpin{to{transform:rotate(360deg)}}
+
+.app-toast{
+  position:absolute;z-index:1250;left:50%;top:18px;transform:translate(-50%,-18px);
+  opacity:0;visibility:hidden;pointer-events:none;background:rgba(16,66,45,.96);color:#fff;
+  padding:10px 16px;border-radius:999px;font-weight:750;font-size:.88rem;
+  box-shadow:0 10px 28px rgba(0,0,0,.22);backdrop-filter:blur(10px);
+  transition:opacity .22s ease,transform .22s ease,visibility .22s ease;
+}
+.app-toast.show{opacity:1;visibility:visible;transform:translate(-50%,0)}
+.sync-refresh-button.is-spinning{pointer-events:none}
+.sync-refresh-button.is-spinning{animation:hufmButtonPulse .8s ease-in-out infinite alternate}
+.sync-refresh-button.is-spinning::first-letter{display:inline-block}
+@keyframes hufmButtonPulse{from{transform:rotate(0deg) scale(1)}to{transform:rotate(12deg) scale(1.05)}}
+
+.map-page .map-corner-actions{gap:8px}
+.map-page .map-corner-actions button{
+  border:1px solid rgba(13,75,52,.14);
+  background:rgba(255,255,255,.96);
+  box-shadow:0 8px 24px rgba(13,55,38,.16);
+  transition:transform .18s ease,box-shadow .18s ease,background .18s ease;
+}
+.map-page .map-corner-actions button:active{transform:scale(.94)}
+.map-primary-actions{box-shadow:0 12px 34px rgba(0,0,0,.28)}
+.map-primary-actions button{transition:background .18s ease,color .18s ease,transform .16s ease}
+.map-primary-actions button:active{transform:scale(.96)}
+
+@media(max-width:700px){
+  .ifmc-drawer{height:min(74dvh,680px)!important;max-height:74dvh!important}
+  .drawer-scroll{padding:10px 12px max(18px,env(safe-area-inset-bottom));gap:9px}
+  .map-page .data-panel summary{min-height:40px;padding:9px 10px;font-size:.86rem}
+  .map-page .data-panel input,.map-page .data-panel select,.map-page .data-panel textarea,.map-page .data-panel button,.map-page .data-panel .button{min-height:40px;font-size:.84rem}
+  .app-toast{top:12px;max-width:calc(100% - 90px);white-space:nowrap;font-size:.8rem;padding:9px 13px}
+  .map-loading{font-size:.86rem}
+}
+
+/* Admin account creation and CSV import */
+.admin-user-tools{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(300px,.85fr);gap:18px;margin-bottom:20px}
+.admin-user-tools .panel{max-height:none;overflow:visible}
+.section-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px;margin-bottom:16px}
+.section-heading h2{margin:0 0 4px;font-size:1.2rem}.section-heading p{margin:0;color:var(--muted);font-size:.9rem}
+.admin-account-form{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important}.wide-field{grid-column:1/-1}
+.csv-actions{display:flex;margin-bottom:12px}.csv-actions .button{width:100%;background:#eef6f1;border-color:#b9d6c5;color:#155c3e}
+.csv-upload-form{gap:12px!important}.csv-note{margin:14px 0 0;padding:11px 12px;background:#f4f8f6;border:1px solid #dde9e2;border-radius:10px;color:#52665b;font-size:.84rem}
+.import-report{margin-bottom:20px;max-height:none!important}.import-errors{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:10px}.import-errors table{min-width:620px}.import-errors th{position:sticky;top:0;z-index:1}
+@media(max-width:900px){.admin-user-tools{grid-template-columns:1fr}.admin-account-form{grid-template-columns:1fr!important}.wide-field{grid-column:auto}}

@@ -3,6 +3,7 @@
 <div class="map-layout">
   <aside class="map-tools ifmc-drawer" id="mapTools" aria-label="Bảng điều khiển bản đồ"><div class="drawer-title"><span><b>HUFM</b><small>Forest Management</small></span><button id="panelClose" type="button" aria-label="Đóng bảng công cụ">×</button></div>
     <div class="mobile-tool-handle" aria-hidden="true"></div>
+    <div class="drawer-scroll" id="drawerScroll">
     <div id="status" class="status" role="status" aria-live="polite">Sẵn sàng.</div>
     <div class="network-bar"><span id="networkDot"></span><b id="networkText">Đang kiểm tra mạng</b><span id="pendingCount">0 bản ghi chờ</span></div>
     <details class="data-panel offline-panel" open>
@@ -45,6 +46,7 @@
       </form>
       <div id="layerList" class="data-list layer-list"></div>
     </details>
+    </div>
   </aside>
   <div class="map-stage">
     <div id="map" aria-label="Bản đồ quản lý rừng"></div>
@@ -56,10 +58,11 @@
       <button id="stopTrackBtn" type="button" title="Dừng và lưu tracklog" disabled>■ <span>Dừng</span></button>
     </div>
     <div class="map-corner-actions" aria-label="Tải và cập nhật">
-      <button id="reloadDataBtn" type="button" title="Tải lại waypoint và tracklog">↻ <span>Dữ liệu</span></button>
       <button id="reloadLayersBtn" type="button" title="Tải lại các lớp bản đồ">▧ <span>Lớp bản đồ</span></button>
-      <button id="updateAppBtn" type="button" title="Kiểm tra và tải phiên bản ứng dụng mới">⟳ <span>Cập nhật app</span></button>
+      <button id="updateAppBtn" class="sync-refresh-button" type="button" title="Cập nhật dữ liệu và phiên bản ứng dụng">🔄 <span>Cập nhật</span></button>
     </div>
+    <div id="mapLoading" class="map-loading" aria-live="polite"><span></span><b>Đang tải bản đồ…</b></div>
+    <div id="appToast" class="app-toast" role="status" aria-live="polite"></div>
     <div class="live-location-card" id="liveLocationCard" aria-live="polite">
       <b id="liveLocationState">GPS chưa bật</b>
       <span id="liveLocationDetail">Bấm Định vị để theo dõi realtime</span>

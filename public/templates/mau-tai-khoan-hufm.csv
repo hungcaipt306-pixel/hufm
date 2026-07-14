@@ -1,0 +1,3 @@
+﻿name,email,password,role,phone,unit,group_name,status
+Nguyễn Văn A,nguyenvana@example.com,Hufm@2026,user,0900000001,Hạt Kiểm lâm A,Nhóm tuần tra 1,approved
+Trần Thị B,tranthib@example.com,Hufm@2026,mod,0900000002,Hạt Kiểm lâm B,Nhóm tuần tra 2,approved

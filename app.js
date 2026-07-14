@@ -16,6 +16,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 const isProduction = process.env.NODE_ENV === 'production';
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: Number(process.env.MAX_LAYER_FILE_MB || 50) * 1024 * 1024 } });
+const csvUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024, files: 1 } });
 const mbtilesCache = new Map();
 
 const HUE_PROVINCE_CODE = '46';
@@ -266,9 +267,142 @@ function normalizeGeoJSON(data) {
 function parseCoordinates(text) {
   return String(text || '').trim().split(/\s+/).map(item => item.split(',').slice(0, 3).map(Number)).filter(c => c.length >= 2 && Number.isFinite(c[0]) && Number.isFinite(c[1]));
 }
+function looksLikeMojibake(value = '') {
+  return /(?:Ã.|Â.|áº.|á».|Ä‘|Æ°|Æ¡|á»|áº|ï»¿|�)/.test(String(value));
+}
+function repairVietnameseMojibake(value = '') {
+  let text = String(value || '').replace(/^\uFEFF/, '').normalize('NFC');
+  if (!looksLikeMojibake(text)) return text;
+  // Trường hợp UTF-8 từng bị đọc nhầm thành Latin-1/Windows-1252, ví dụ Huáº¿.
+  try {
+    const repaired = Buffer.from(text, 'latin1').toString('utf8').normalize('NFC');
+    const oldBad = (text.match(/(?:Ã.|Â.|áº.|á».|Ä‘|Æ°|Æ¡|�)/g) || []).length;
+    const newBad = (repaired.match(/(?:Ã.|Â.|áº.|á».|Ä‘|Æ°|Æ¡|�)/g) || []).length;
+    if (!repaired.includes('�') && newBad < oldBad) text = repaired;
+  } catch (_) {}
+  return text;
+}
+function decodeKmlBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer)) buffer = Buffer.from(buffer || '');
+  let encoding = 'utf-8';
+  let offset = 0;
+  if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) {
+    offset = 3;
+  } else if (buffer.length >= 2 && buffer[0] === 0xFF && buffer[1] === 0xFE) {
+    encoding = 'utf-16le'; offset = 2;
+  } else if (buffer.length >= 2 && buffer[0] === 0xFE && buffer[1] === 0xFF) {
+    const body = Buffer.from(buffer.subarray(2));
+    for (let i = 0; i + 1 < body.length; i += 2) [body[i], body[i + 1]] = [body[i + 1], body[i]];
+    return repairVietnameseMojibake(new TextDecoder('utf-16le').decode(body));
+  } else {
+    const head = buffer.subarray(0, Math.min(buffer.length, 512)).toString('latin1');
+    const declared = head.match(/<\?xml[^>]*encoding=["']\s*([^"']+)\s*["']/i)?.[1]?.toLowerCase();
+    const aliases = {
+      'utf8': 'utf-8', 'utf_8': 'utf-8',
+      'windows-1258': 'windows-1258', 'cp1258': 'windows-1258', 'win1258': 'windows-1258',
+      'windows-1252': 'windows-1252', 'cp1252': 'windows-1252',
+      'iso-8859-1': 'windows-1252', 'latin1': 'windows-1252',
+      'utf-16': 'utf-16le', 'utf-16le': 'utf-16le'
+    };
+    if (declared && aliases[declared]) encoding = aliases[declared];
+    else {
+      try { new TextDecoder('utf-8', { fatal: true }).decode(buffer); }
+      catch (_) { encoding = 'windows-1258'; }
+    }
+  }
+  let text;
+  try { text = new TextDecoder(encoding, { fatal: false }).decode(buffer.subarray(offset)); }
+  catch (_) { text = new TextDecoder('utf-8', { fatal: false }).decode(buffer.subarray(offset)); }
+  return repairVietnameseMojibake(text);
+}
+function decodeCsvBuffer(buffer) {
+  if (!Buffer.isBuffer(buffer)) buffer = Buffer.from(buffer || '');
+  if (buffer.length >= 2 && buffer[0] === 0xFF && buffer[1] === 0xFE) return repairVietnameseMojibake(new TextDecoder('utf-16le').decode(buffer.subarray(2)));
+  if (buffer.length >= 2 && buffer[0] === 0xFE && buffer[1] === 0xFF) {
+    const body = Buffer.from(buffer.subarray(2));
+    for (let i = 0; i + 1 < body.length; i += 2) [body[i], body[i + 1]] = [body[i + 1], body[i]];
+    return repairVietnameseMojibake(new TextDecoder('utf-16le').decode(body));
+  }
+  let source = buffer;
+  if (buffer.length >= 3 && buffer[0] === 0xEF && buffer[1] === 0xBB && buffer[2] === 0xBF) source = buffer.subarray(3);
+  try { return repairVietnameseMojibake(new TextDecoder('utf-8', { fatal: true }).decode(source)); }
+  catch (_) { return repairVietnameseMojibake(new TextDecoder('windows-1258').decode(source)); }
+}
+function detectCsvDelimiter(text) {
+  const first = String(text || '').split(/\r?\n/, 1)[0] || '';
+  const count = delimiter => { let quoted=false,n=0; for(let i=0;i<first.length;i++){ if(first[i]==='"' && first[i+1]==='"'){i++;continue;} if(first[i]==='"') quoted=!quoted; else if(first[i]===delimiter&&!quoted)n++; } return n; };
+  return count(';') > count(',') ? ';' : ',';
+}
+function parseCsv(text) {
+  text = String(text || '').replace(/^\uFEFF/, '');
+  const delimiter = detectCsvDelimiter(text);
+  const rows=[]; let row=[], field='', quoted=false;
+  for (let i=0;i<text.length;i++) {
+    const ch=text[i];
+    if (quoted) {
+      if (ch==='"' && text[i+1]==='"') { field+='"'; i++; }
+      else if (ch==='"') quoted=false;
+      else field+=ch;
+    } else if (ch==='"') quoted=true;
+    else if (ch===delimiter) { row.push(field.trim()); field=''; }
+    else if (ch==='\n') { row.push(field.trim()); if(row.some(v=>v!=='')) rows.push(row); row=[]; field=''; }
+    else if (ch!=='\r') field+=ch;
+  }
+  row.push(field.trim()); if(row.some(v=>v!=='')) rows.push(row);
+  if (!rows.length) return [];
+  const aliases = {
+    'họ tên':'name','ho ten':'name','tên':'name','ten':'name','name':'name',
+    'email':'email','thư điện tử':'email','thu dien tu':'email',
+    'mật khẩu':'password','mat khau':'password','password':'password',
+    'vai trò':'role','vai tro':'role','role':'role',
+    'điện thoại':'phone','dien thoai':'phone','số điện thoại':'phone','so dien thoai':'phone','phone':'phone',
+    'đơn vị':'unit','don vi':'unit','unit':'unit',
+    'nhóm':'group_name','nhom':'group_name','tên nhóm':'group_name','ten nhom':'group_name','group':'group_name','group_name':'group_name',
+    'trạng thái':'status','trang thai':'status','status':'status'
+  };
+  const normalizeHeader = value => repairVietnameseMojibake(String(value||'')).trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/đ/g,'d').replace(/\s+/g,' ');
+  const normalizedAliases={}; for(const [k,v] of Object.entries(aliases)) normalizedAliases[normalizeHeader(k)]=v;
+  const headers=rows.shift().map(h=>normalizedAliases[normalizeHeader(h)]||normalizeHeader(h).replace(/ /g,'_'));
+  return rows.map((values,index)=>({ line:index+2, data:Object.fromEntries(headers.map((h,i)=>[h,repairVietnameseMojibake(values[i]||'').trim()])) }));
+}
+function validEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').toLowerCase()); }
+function deepRepairVietnamese(value) {
+  if (typeof value === 'string') return repairVietnameseMojibake(value);
+  if (Array.isArray(value)) return value.map(deepRepairVietnamese);
+  if (value && typeof value === 'object') {
+    const output = {};
+    for (const [key, item] of Object.entries(value)) output[repairVietnameseMojibake(key)] = deepRepairVietnamese(item);
+    return output;
+  }
+  return value;
+}
+function repairUploadedFilename(value = '') {
+  const name = String(value || '');
+  if (!looksLikeMojibake(name)) {
+    try {
+      const utf8 = Buffer.from(name, 'latin1').toString('utf8');
+      if (!utf8.includes('�') && /[À-ỹĐđ]/.test(utf8)) return utf8.normalize('NFC');
+    } catch (_) {}
+    return name.normalize('NFC');
+  }
+  return repairVietnameseMojibake(name);
+}
 function firstText(node, tag) {
   const item = node.getElementsByTagName(tag)[0];
-  return item ? String(item.textContent || '').trim() : '';
+  return item ? repairVietnameseMojibake(String(item.textContent || '').trim()) : '';
+}
+function readExtendedData(placemark) {
+  const result = {};
+  for (const data of Array.from(placemark.getElementsByTagName('Data'))) {
+    const key = repairVietnameseMojibake(data.getAttribute('name') || '').trim();
+    const valueNode = data.getElementsByTagName('value')[0];
+    if (key && valueNode) result[key] = repairVietnameseMojibake(String(valueNode.textContent || '').trim());
+  }
+  for (const item of Array.from(placemark.getElementsByTagName('SimpleData'))) {
+    const key = repairVietnameseMojibake(item.getAttribute('name') || '').trim();
+    if (key) result[key] = repairVietnameseMojibake(String(item.textContent || '').trim());
+  }
+  return result;
 }
 function kmlToGeoJSON(xmlText) {
   const doc = new DOMParser().parseFromString(xmlText, 'text/xml');
@@ -277,7 +411,7 @@ function kmlToGeoJSON(xmlText) {
   const features = [];
   const placemarks = Array.from(doc.getElementsByTagName('Placemark'));
   for (const placemark of placemarks) {
-    const properties = { name: firstText(placemark, 'name'), description: firstText(placemark, 'description') };
+    const properties = { name: firstText(placemark, 'name'), description: firstText(placemark, 'description'), ...readExtendedData(placemark) };
     const geometries = [];
     for (const point of Array.from(placemark.getElementsByTagName('Point'))) {
       const c = parseCoordinates(firstText(point, 'coordinates'))[0]; if (c) geometries.push({ type: 'Point', coordinates: c });
@@ -601,13 +735,14 @@ app.get('/api/layers', requireAuth, async (req, res) => {
     include: [{ model: User, attributes: ['id','name'] }, { model: Group, attributes: ['id','name'] }],
     order: [['createdAt','DESC']]
   });
-  res.json(layers);
+  res.json(layers.map(layer => deepRepairVietnamese(layer.toJSON())));
 });
 
 app.post('/api/layers', requireAuth, upload.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Vui lòng chọn tệp bản đồ.' });
-    const ext = path.extname(req.file.originalname || '').toLowerCase();
+    const originalFilename = repairUploadedFilename(req.file.originalname || '');
+    const ext = path.extname(originalFilename).toLowerCase();
     const type = ext === '.geojson' || ext === '.json' ? 'geojson' : ext === '.kml' ? 'kml' : ext === '.mbtiles' ? 'mbtiles' : null;
     if (!type) return res.status(400).json({ error: 'Chỉ hỗ trợ GeoJSON, KML và MBTiles.' });
     let vectorData = null, fileData = null, metadata = {};
@@ -615,7 +750,7 @@ app.post('/api/layers', requireAuth, upload.single('file'), async (req, res) => 
       vectorData = normalizeGeoJSON(JSON.parse(req.file.buffer.toString('utf8')));
       metadata.featureCount = vectorData.features.length;
     } else if (type === 'kml') {
-      vectorData = normalizeGeoJSON(kmlToGeoJSON(req.file.buffer.toString('utf8')));
+      vectorData = normalizeGeoJSON(kmlToGeoJSON(decodeKmlBuffer(req.file.buffer)));
       metadata.featureCount = vectorData.features.length;
     } else {
       const SQL = await getSqlJs();
@@ -630,9 +765,9 @@ app.post('/api/layers', requireAuth, upload.single('file'), async (req, res) => 
       fileData = req.file.buffer;
     }
     const layer = await MapLayer.create({
-      name: (req.body.name || path.basename(req.file.originalname, ext)).trim(),
-      description: (req.body.description || '').trim(), layerType: type,
-      originalFilename: req.file.originalname, mimeType: req.file.mimetype,
+      name: repairVietnameseMojibake((req.body.name || path.basename(originalFilename, ext)).trim()),
+      description: repairVietnameseMojibake((req.body.description || '').trim()), layerType: type,
+      originalFilename, mimeType: req.file.mimetype,
       sizeBytes: req.file.size, vectorData, fileData, metadata,
       userId: req.session.user.id, groupId: req.session.user.groupId || null
     });
@@ -648,7 +783,7 @@ app.get('/api/layers/:id/data', requireAuth, async (req, res) => {
   if (!layer) return res.status(404).json({ error: 'Không tìm thấy lớp bản đồ.' });
   if (!canAccessRecord(req.session.user, layer)) return res.status(403).json({ error: 'Không có quyền.' });
   if (layer.layerType === 'mbtiles') return res.status(400).json({ error: 'Lớp MBTiles được truy cập qua tile endpoint.' });
-  res.json(layer.vectorData);
+  res.json(deepRepairVietnamese(layer.vectorData));
 });
 
 app.get('/api/layers/:id/tiles/:z/:x/:y.:ext', requireAuth, async (req, res) => {
@@ -679,7 +814,61 @@ app.delete('/api/layers/:id', requireAuth, async (req, res) => {
 app.get('/admin/users', requireRole('admin'), async (req, res) => {
   const users = await User.findAll({ include: Group, order: [['createdAt','DESC']] });
   const groups = await Group.findAll({ order: [['name','ASC']] });
-  res.render('admin-users', { users, groups });
+  const importResult = req.session.importResult || null;
+  delete req.session.importResult;
+  res.render('admin-users', { users, groups, importResult });
+});
+app.post('/admin/users/create', requireRole('admin'), async (req, res) => {
+  try {
+    const name = repairVietnameseMojibake(req.body.name || '').trim();
+    const email = String(req.body.email || '').trim().toLowerCase();
+    const password = String(req.body.password || '');
+    const role = ['user','mod'].includes(req.body.role) ? req.body.role : 'user';
+    if (!name || !validEmail(email) || password.length < 8) throw new Error('Họ tên, email hợp lệ và mật khẩu từ 8 ký tự là bắt buộc.');
+    if (await User.count({ where:{ email } })) throw new Error('Email đã tồn tại.');
+    const groupId = req.body.groupId ? Number(req.body.groupId) : null;
+    if (groupId && !(await Group.findByPk(groupId))) throw new Error('Nhóm được chọn không tồn tại.');
+    await User.create({ name, email, passwordHash:await bcrypt.hash(password,12), phone:repairVietnameseMojibake(req.body.phone||'').trim(), unit:repairVietnameseMojibake(req.body.unit||'').trim(), role, status:'approved', groupId });
+    flash(req,'success',`Đã tạo tài khoản ${email} với vai trò ${role}.`);
+  } catch (error) { flash(req,'error',error.message || 'Không thể tạo tài khoản.'); }
+  res.redirect('/admin/users');
+});
+app.post('/admin/users/import', requireRole('admin'), csvUpload.single('csvFile'), async (req, res) => {
+  const result = { created:[], skipped:[], total:0 };
+  try {
+    if (!req.file) throw new Error('Vui lòng chọn file CSV.');
+    if (!/\.csv$/i.test(req.file.originalname || '')) throw new Error('Chỉ chấp nhận file có đuôi .csv.');
+    const rows = parseCsv(decodeCsvBuffer(req.file.buffer));
+    if (!rows.length) throw new Error('File CSV không có dòng dữ liệu.');
+    if (rows.length > 1000) throw new Error('Mỗi lần chỉ nhập tối đa 1.000 tài khoản.');
+    result.total = rows.length;
+    const groups = await Group.findAll();
+    const groupMap = new Map(groups.map(g=>[repairVietnameseMojibake(g.name).trim().toLowerCase(),g.id]));
+    const emails = rows.map(r=>String(r.data.email||'').trim().toLowerCase()).filter(Boolean);
+    const existing = new Set((await User.findAll({ where:{email:{[Op.in]:emails}}, attributes:['email'] })).map(u=>u.email.toLowerCase()));
+    const seen = new Set();
+    for (const row of rows) {
+      const d=row.data, name=repairVietnameseMojibake(d.name||'').trim(), email=String(d.email||'').trim().toLowerCase(), password=String(d.password||'');
+      const role=String(d.role||'user').trim().toLowerCase(), status=String(d.status||'approved').trim().toLowerCase();
+      const errors=[];
+      if(!name) errors.push('thiếu họ tên');
+      if(!validEmail(email)) errors.push('email không hợp lệ');
+      if(password.length<8) errors.push('mật khẩu dưới 8 ký tự');
+      if(!['user','mod'].includes(role)) errors.push('vai trò chỉ được user hoặc mod');
+      if(!['approved','pending'].includes(status)) errors.push('trạng thái chỉ được approved hoặc pending');
+      if(existing.has(email)||seen.has(email)) errors.push('email đã tồn tại hoặc bị trùng trong file');
+      let groupId=null; const groupName=repairVietnameseMojibake(d.group_name||'').trim();
+      if(groupName){ groupId=groupMap.get(groupName.toLowerCase())||null; if(!groupId) errors.push(`không tìm thấy nhóm “${groupName}”`); }
+      if(errors.length){ result.skipped.push({line:row.line,email:email||'(trống)',reason:errors.join('; ')}); continue; }
+      try {
+        await User.create({ name,email,passwordHash:await bcrypt.hash(password,12),role,status,phone:repairVietnameseMojibake(d.phone||'').trim(),unit:repairVietnameseMojibake(d.unit||'').trim(),groupId });
+        seen.add(email); existing.add(email); result.created.push({line:row.line,email,role,group:groupName||''});
+      } catch(error){ result.skipped.push({line:row.line,email,reason:error.name==='SequelizeUniqueConstraintError'?'email đã tồn tại':'lỗi cơ sở dữ liệu'}); }
+    }
+    req.session.importResult=result;
+    flash(req,'success',`Đã tạo ${result.created.length}/${result.total} tài khoản; bỏ qua ${result.skipped.length} dòng.`);
+  } catch(error) { flash(req,'error',error.message || 'Không thể nhập CSV.'); }
+  res.redirect('/admin/users');
 });
 app.post('/admin/users/:id/approve', requireRole('admin'), async (req, res) => { await User.update({ status:'approved' }, { where:{ id:req.params.id } }); flash(req,'success','Đã duyệt tài khoản.'); res.redirect('/admin/users'); });
 app.post('/admin/users/:id/reject', requireRole('admin'), async (req, res) => { await User.update({ status:'rejected' }, { where:{ id:req.params.id } }); flash(req,'success','Đã từ chối tài khoản.'); res.redirect('/admin/users'); });

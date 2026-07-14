@@ -131,3 +131,27 @@ Sau khi đăng nhập hoặc mở ứng dụng, người dùng được đưa th
 ## Cập nhật giao diện chọn lớp trên điện thoại
 
 Bảng chọn lớp Leaflet được thu gọn thành nút nhỏ ở mép trái bản đồ. Chạm nút để mở danh sách lớp có thanh cuộn; chạm bản đồ để đóng. Các ô radio/checkbox được giới hạn kích thước để không che bản đồ trên iPhone.
+
+## Cập nhật giao diện 1.0.2
+
+- Panel Công cụ có vùng cuộn độc lập, quán tính cuộn trên iOS và thanh cuộn mảnh.
+- Các nhóm chức năng dùng accordion gọn, hiệu ứng mở/đóng mượt hơn.
+- Bản đồ tự tính lại kích thước bằng ResizeObserver và có lớp nền địa hình dự phòng khi OSM lỗi.
+- Bỏ nút làm mới dữ liệu trùng lặp ở góc bản đồ.
+- Nút Cập nhật dùng biểu tượng hai mũi tên, đồng bộ dữ liệu/lớp/thời tiết/cảnh báo, tải lại tile và hiển thị “Đã cập nhật lại”.
+- Nâng cache PWA lên hue-shell-v10.
+
+
+## Sửa lỗi font KML tiếng Việt 1.0.3
+
+- Tự nhận dạng UTF-8, UTF-8 BOM, UTF-16 LE/BE, Windows-1258 và Windows-1252 theo BOM hoặc khai báo XML.
+- Khôi phục chuỗi tiếng Việt bị mojibake như `Huáº¿`, `phÆ°á»ng`, `Ä‘á»‹a giá»›i`.
+- Chuẩn hóa Unicode NFC cho tên lớp, tên đối tượng, mô tả và ExtendedData/SimpleData.
+- Sửa tên tệp KML tiếng Việt bị sai khi Multer nhận tên file theo Latin-1.
+- Các lớp KML cũ cũng được sửa khi trả dữ liệu ra bản đồ; không bắt buộc tải lại, dù tải lại vẫn được khuyến nghị.
+- Nâng cache PWA lên `hue-shell-v11`.
+
+
+## Tạo tài khoản bởi Admin và nhập CSV
+
+Admin có thể tạo trực tiếp tài khoản user/mod tại **Tài khoản**, hoặc tải file mẫu `public/templates/mau-tai-khoan-hufm.csv`, điền tối đa 1.000 dòng và tải lên. Các cột bắt buộc là `name`, `email`, `password`; các cột tùy chọn gồm `role`, `phone`, `unit`, `group_name`, `status`. `role` chỉ nhận `user` hoặc `mod`; `status` nhận `approved` hoặc `pending`; `group_name` phải trùng tên nhóm đã tạo trong HUFM.
