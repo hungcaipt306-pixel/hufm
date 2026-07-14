@@ -67,8 +67,11 @@
   <div class="map-stage">
     <div id="map" aria-label="Bản đồ quản lý rừng"></div>
     <button id="floatingPanelToggle" class="floating-panel-toggle" type="button" aria-controls="mapTools" aria-expanded="false"><span class="tool-toggle-icon">☰</span><span>Công cụ</span></button>
+    <div class="map-right-rail" aria-label="Điều khiển bản đồ nhanh">
+      <button id="locateBtn" class="rail-button primary active-tool" type="button" title="Định vị và bám theo vị trí">⌖ <span>Định vị</span></button>
+      <button id="updateAppBtn" class="rail-button sync-refresh-button" type="button" title="Cập nhật dữ liệu và phiên bản ứng dụng">↻ <span>Cập nhật</span></button>
+    </div>
     <div class="map-primary-actions" aria-label="Công cụ hiện trường">
-      <button id="locateBtn" class="primary active-tool" type="button" title="Định vị và bám theo vị trí">⌖ <span>Định vị</span></button>
       <button id="headingUpBtn" type="button" title="Xoay bản đồ theo hướng điện thoại" aria-pressed="false">➤ <span>Hướng lên</span></button>
       <button id="addWpBtn" type="button" title="Lưu waypoint tại vị trí hiện tại">＋ <span>Waypoint</span></button>
       <button id="startTrackBtn" type="button" title="Bắt đầu ghi tracklog">▶ <span>Ghi tuyến</span></button>
@@ -76,9 +79,24 @@
     </div>
     <div class="map-corner-actions" aria-label="Tải và cập nhật">
       <button id="vietnamOverviewBtn" type="button" title="Xem toàn cảnh Việt Nam, Hoàng Sa và Trường Sa">🇻🇳 <span>Việt Nam</span></button>
-      <button id="reloadLayersBtn" type="button" title="Tải lại các lớp bản đồ">▧ <span>Lớp bản đồ</span></button>
-      <button id="updateAppBtn" class="sync-refresh-button" type="button" title="Cập nhật dữ liệu và phiên bản ứng dụng">🔄 <span>Cập nhật</span></button>
     </div>
+    <button id="reloadLayersBtn" class="map-layer-studio-button" type="button" title="Mở bảng lớp bản đồ" aria-controls="layerStudio" aria-expanded="false"><span class="layer-stack-icon">◆</span><span>Lớp</span></button>
+    <section id="layerStudio" class="layer-studio is-hidden" aria-label="Tùy chỉnh lớp bản đồ">
+      <header><div><b>🗂 Lớp bản đồ</b><small>Nền bản đồ, lớp tùy chỉnh và nhãn</small></div><button id="layerStudioClose" type="button" aria-label="Đóng">×</button></header>
+      <div class="layer-studio-scroll">
+        <div class="layer-studio-section">
+          <h4>🛰 Bản đồ nền</h4>
+          <label class="base-layer-option"><input type="radio" name="studioBaseLayer" value="googleHybrid" checked><span class="base-dot blue"></span><b>Vệ tinh + nhãn Google</b></label>
+          <label class="base-layer-option"><input type="radio" name="studioBaseLayer" value="googleSatellite"><span class="base-dot green"></span><b>Vệ tinh chuẩn Google</b></label>
+          <label class="base-layer-option"><input type="radio" name="studioBaseLayer" value="street"><span class="base-dot orange"></span><b>Đường phố (OSM)</b></label>
+          <label class="base-layer-option"><input type="radio" name="studioBaseLayer" value="topo"><span class="base-dot purple"></span><b>Địa hình & bình độ</b></label>
+        </div>
+        <div class="layer-studio-section custom-layer-section">
+          <div class="studio-section-head"><h4>📁 Lớp tùy chỉnh</h4><button id="studioRefreshLayers" type="button">↻ Làm mới</button></div>
+          <div id="layerStudioList" class="studio-layer-list"></div>
+        </div>
+      </div>
+    </section>
     <div id="mapLoading" class="map-loading" aria-live="polite"><span></span><b>Đang tải bản đồ…</b></div>
     <div id="appToast" class="app-toast" role="status" aria-live="polite"></div>
     <div class="live-location-card" id="liveLocationCard" aria-live="polite">

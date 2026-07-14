@@ -3,7 +3,8 @@ if (typeof window.L === 'undefined') {
   if (mapEl) mapEl.innerHTML = '<div class="map-load-error"><b>Không tải được thư viện bản đồ.</b><br>Hãy bấm “Cập nhật app”, tải lại trang hoặc kiểm tra kết nối.</div>';
   throw new Error('Leaflet chưa được tải');
 }
-const map = L.map('map', { zoomControl:true, preferCanvas:true, zoomAnimation:true, fadeAnimation:true, markerZoomAnimation:true }).setView([16.4637, 107.5909], 11);
+const map = L.map('map', { zoomControl:false, preferCanvas:true, zoomAnimation:true, fadeAnimation:true, markerZoomAnimation:true }).setView([16.4637, 107.5909], 11);
+L.control.zoom({ position:'bottomright' }).addTo(map);
 const mapLoading=document.getElementById('mapLoading');
 const hideMapLoading=()=>mapLoading?.classList.add('is-hidden');
 const showMapLoading=(message='Đang tải bản đồ…')=>{if(mapLoading){mapLoading.querySelector('b').textContent=message;mapLoading.classList.remove('is-hidden');}};
@@ -25,15 +26,22 @@ let usingTopoFallback=false;
 const googleHybridLayer=L.tileLayer('/api/base-tiles/google-hybrid/{z}/{x}/{y}.jpg',{
   ...commonTileOptions,maxZoom:22,attribution:'Bản đồ &copy; Google'
 });
+const googleSatelliteLayer=L.tileLayer('/api/base-tiles/google-satellite/{z}/{x}/{y}.jpg',{
+  ...commonTileOptions,maxZoom:22,attribution:'Bản đồ &copy; Google'
+});
 const googleHybridDirect=L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{
   ...commonTileOptions,maxZoom:22,attribution:'Bản đồ &copy; Google'
 });
+const googleSatelliteDirect=L.tileLayer('https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',{
+  ...commonTileOptions,maxZoom:22,attribution:'Bản đồ &copy; Google'
+});
 let usingGoogleDirect=false;
+let usingGoogleSatelliteDirect=false;
 streetLayer.addTo(map);
-let streetTileErrors=0,topoTileErrors=0,googleTileErrors=0;
+let streetTileErrors=0,topoTileErrors=0,googleTileErrors=0,googleSatelliteTileErrors=0;
 function attachTileStatus(layer,label,errorCounter){
   layer.on('loading',()=>showMapLoading(`Đang tải ${label}…`));
-  layer.on('tileload',()=>{if(errorCounter==='street')streetTileErrors=0;if(errorCounter==='topo')topoTileErrors=0;if(errorCounter==='google')googleTileErrors=0;hideMapLoading();});
+  layer.on('tileload',()=>{if(errorCounter==='street')streetTileErrors=0;if(errorCounter==='topo')topoTileErrors=0;if(errorCounter==='google')googleTileErrors=0;if(errorCounter==='googleSatellite')googleSatelliteTileErrors=0;hideMapLoading();});
   layer.on('load',()=>{hideMapLoading();status(`${label} đã sẵn sàng.`);});
   layer.on('tileerror',()=>{
     if(errorCounter==='street')streetTileErrors++;
@@ -58,6 +66,18 @@ function attachTileStatus(layer,label,errorCounter){
         status('Google Satellite chưa tải được. Hãy kiểm tra kết nối và bấm cập nhật lại.');
       }
     }
+    if(errorCounter==='googleSatellite'){
+      googleSatelliteTileErrors++;
+      if(googleSatelliteTileErrors>=4 && map.hasLayer(googleSatelliteLayer) && !usingGoogleSatelliteDirect){
+        usingGoogleSatelliteDirect=true;
+        map.removeLayer(googleSatelliteLayer);
+        googleSatelliteDirect.addTo(map);
+        status('Đang thử lại Google Satellite chuẩn bằng kết nối trực tiếp…');
+      } else if(googleSatelliteTileErrors>=8){
+        hideMapLoading();
+        status('Google Satellite chuẩn chưa tải được. Hãy kiểm tra kết nối.');
+      }
+    }
   });
 }
 attachTileStatus(streetLayer,'bản đồ đường phố','street');
@@ -65,6 +85,8 @@ attachTileStatus(topoLayer,'bản đồ địa hình','topo');
 attachTileStatus(topoDirectFallback,'bản đồ địa hình dự phòng','topoFallback');
 attachTileStatus(googleHybridLayer,'Google Satellite Hybrid','google');
 attachTileStatus(googleHybridDirect,'Google Satellite Hybrid trực tiếp','google');
+attachTileStatus(googleSatelliteLayer,'Google Satellite','googleSatellite');
+attachTileStatus(googleSatelliteDirect,'Google Satellite trực tiếp','googleSatellite');
 setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-tile-loaded'))hideMapLoading();},900);
 
 const waypointLayer = L.layerGroup().addTo(map);
@@ -76,7 +98,8 @@ const uploadedLayers = new Map();
 const baseLayers={
   'Đường phố (OpenStreetMap)':streetLayer,
   'Địa hình & bình độ':topoLayer,
-  'Google Satellite + nhãn Google':googleHybridLayer
+  'Google Satellite + nhãn Google':googleHybridLayer,
+  'Google Satellite chuẩn':googleSatelliteLayer
 };
 const overlayLayers={Waypoint:waypointLayer,Tracklog:trackLayer,'Cảnh báo cháy rừng':fireAlertLayer,'Vùng nguy cơ cháy':fireRiskZoneLayer,'Bản đồ Việt Nam (Hoàng Sa, Trường Sa)':vietnamNationalLayer};
 const layerControl = L.control.layers(
@@ -89,6 +112,7 @@ map.on('baselayerchange',event=>{
     googleTileErrors=0;
     usingGoogleDirect=false;
   }
+  if(event.layer===googleSatelliteLayer){usingGoogleSatelliteDirect=false;googleSatelliteTileErrors=0;}
   if(event.layer===topoLayer){
     usingTopoFallback=false;
     topoTileErrors=0;
@@ -270,6 +294,69 @@ function removeUploadedLayer(id) {
   layerControl.removeLayer(item.layer);
   uploadedLayers.delete(id);
 }
+
+const layerStyleDefaults = { visible:true, opacity:0.72, color:'#2878d7', labelField:'', labelColor:'#fff200', labelSize:12 };
+function layerStyleKey(id){ return `hufm-layer-style-${id}`; }
+function loadLayerStyle(id){
+  try { return { ...layerStyleDefaults, ...JSON.parse(localStorage.getItem(layerStyleKey(id)) || '{}') }; }
+  catch { return { ...layerStyleDefaults }; }
+}
+function saveLayerStyle(id, settings){ localStorage.setItem(layerStyleKey(id), JSON.stringify(settings)); }
+function vectorStyleFrom(settings){ return { color:settings.color, weight:2.5, opacity:Math.max(.2, settings.opacity), fillColor:settings.color, fillOpacity:Math.min(.45, settings.opacity * .35) }; }
+function getFeatureValue(props, field){ const value=props?.[field]; return value == null ? '' : String(value).replace(/<br\s*\/?\s*>/gi,' • ').replace(/\s*•\s*•+/g,' • ').trim(); }
+function popupHtmlForFeature(props, settings){
+  if(settings.labelField){
+    const value=getFeatureValue(props, settings.labelField);
+    return value ? `<div class="feature-popup-compact"><small>${esc(settings.labelField)}</small><b>${esc(value)}</b></div>` : '';
+  }
+  const rows=Object.entries(props||{}).filter(([,v])=>v!==null&&v!==undefined&&String(v).trim()!=='').slice(0,8);
+  return rows.map(([k,v])=>`<div class="feature-popup-row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`).join('');
+}
+function applyVectorLayerSettings(item){
+  if(!item?.layer) return;
+  const settings=item.settings;
+  if(item.meta.layerType==='mbtiles'){item.layer.setOpacity?.(settings.opacity);if(settings.visible&&!map.hasLayer(item.layer))item.layer.addTo(map);if(!settings.visible&&map.hasLayer(item.layer))map.removeLayer(item.layer);return;}
+  item.layer.setStyle?.(vectorStyleFrom(settings));
+  item.layer.eachLayer(featureLayer=>{
+    const props=featureLayer.feature?.properties||{};
+    featureLayer.unbindTooltip?.();
+    featureLayer.unbindPopup?.();
+    if(settings.labelField){
+      const value=getFeatureValue(props,settings.labelField);
+      if(value) featureLayer.bindTooltip(`<span style="color:${esc(settings.labelColor)};font-size:${Number(settings.labelSize)}px">${esc(value)}</span>`,{permanent:true,direction:'center',className:'hufm-feature-label',opacity:1});
+    }
+    const popup=popupHtmlForFeature(props,settings);
+    if(popup) featureLayer.bindPopup(popup,{maxWidth:300});
+  });
+  if(settings.visible && !map.hasLayer(item.layer)) item.layer.addTo(map);
+  if(!settings.visible && map.hasLayer(item.layer)) map.removeLayer(item.layer);
+}
+function layerPropertyFields(item){
+  if(!item?.geojson?.features) return [];
+  const names=new Set();
+  for(const feature of item.geojson.features.slice(0,100)) Object.keys(feature.properties||{}).forEach(k=>names.add(k));
+  return [...names].sort((a,b)=>a.localeCompare(b,'vi'));
+}
+function colorChoices(active){
+  return ['#2878d7','#24934b','#ee6c00','#8e44ad','#d81b60','#00a6a6','#d32f2f','#5c4b8a'].map(c=>`<button type="button" class="style-color ${c===active?'is-active':''}" data-style-color="${c}" style="--swatch:${c}" aria-label="Màu ${c}"></button>`).join('');
+}
+function renderLayerStudio(layers){
+  const list=document.getElementById('layerStudioList'); if(!list) return;
+  list.innerHTML='';
+  for(const meta of layers){
+    const item=uploadedLayers.get(meta.id); if(!item) continue;
+    const settings=item.settings||loadLayerStyle(meta.id);
+    const fields=layerPropertyFields(item);
+    const options=['<option value="">Không hiển thị</option>',...fields.map(f=>`<option value="${esc(f)}" ${f===settings.labelField?'selected':''}>${esc(f)}</option>`)].join('');
+    list.insertAdjacentHTML('beforeend',`<article class="studio-layer-card" data-studio-layer-id="${meta.id}">
+      <div class="studio-layer-title"><span class="drag-mark">≡</span><b>${esc(meta.name)}</b><div class="studio-layer-actions"><button type="button" data-studio-action="toggle" title="Bật/tắt">${settings.visible?'👁':'🙈'}</button><a href="/api/layers/${meta.id}/download" title="Tải xuống">⬇</a><button type="button" data-studio-action="delete" class="delete-icon" title="Xóa">🗑</button></div></div>
+      <label class="studio-range">Độ mờ <input type="range" min="10" max="100" value="${Math.round(settings.opacity*100)}" data-studio-setting="opacity"><output>${Math.round(settings.opacity*100)}%</output></label>
+      ${meta.layerType==='mbtiles'?'':`<div class="studio-style-row"><span>Màu sắc</span><div class="style-palette">${colorChoices(settings.color)}</div></div>
+      <div class="studio-label-row"><label>Nhãn <select data-studio-setting="labelField">${options}</select></label><label class="label-color-control"><span>Màu</span><input type="color" value="${settings.labelColor}" data-studio-setting="labelColor"></label><label><span>Cỡ</span><select data-studio-setting="labelSize"><option ${settings.labelSize===10?'selected':''}>10</option><option ${settings.labelSize===12?'selected':''}>12</option><option ${settings.labelSize===14?'selected':''}>14</option><option ${settings.labelSize===16?'selected':''}>16</option><option ${settings.labelSize===18?'selected':''}>18</option></select></label></div>`}
+    </article>`);
+  }
+  if(!layers.length) list.innerHTML='<div class="layer-empty">Chưa có lớp tùy chỉnh.</div>';
+}
 async function createUploadedLayer(meta) {
   let layer;
   if (meta.layerType === 'mbtiles') {
@@ -295,19 +382,19 @@ async function createUploadedLayer(meta) {
     }
   } else {
     const geojson = await api(`/api/layers/${meta.id}/data`);
+    const settings=loadLayerStyle(meta.id);
+    if(!settings.labelField){const keys=Object.keys(geojson.features?.[0]?.properties||{});settings.labelField=keys.find(k=>/^name$/i.test(k))||keys.find(k=>/^(ten|tên|label)$/i.test(k))||'';saveLayerStyle(meta.id,settings);}
     layer = L.geoJSON(geojson, {
-      style: randomVectorStyle,
-      pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 6, ...randomVectorStyle() }),
-      onEachFeature: (feature, featureLayer) => {
-        const props = feature.properties || {};
-        const rows = Object.entries(props).slice(0, 12).map(([k, v]) => `<b>${esc(k)}:</b> ${esc(v)}`).join('<br>');
-        if (rows) featureLayer.bindPopup(rows);
-      }
+      style: () => vectorStyleFrom(settings),
+      pointToLayer: (_feature, latlng) => L.circleMarker(latlng, { radius: 6, ...vectorStyleFrom(settings) })
     });
+    uploadedLayers.set(meta.id, { layer, meta, geojson, settings });
+    applyVectorLayerSettings(uploadedLayers.get(meta.id));
   }
-  uploadedLayers.set(meta.id, { layer, meta });
+  if (!uploadedLayers.has(meta.id)) uploadedLayers.set(meta.id, { layer, meta, settings:loadLayerStyle(meta.id) });
   layerControl.addOverlay(layer, meta.name);
-  layer.addTo(map);
+  const item=uploadedLayers.get(meta.id);
+  if(item?.settings?.visible!==false) layer.addTo(map);
   if (layer.getBounds) {
     const bounds = layer.getBounds();
     if (bounds?.isValid()) map.fitBounds(bounds, { padding: [25, 25], maxZoom: 17 });
@@ -330,7 +417,58 @@ async function loadLayers() {
     list.insertAdjacentHTML('beforeend', `<div class="data-item" data-layer-id="${meta.id}"><span class="layer-type">${esc(meta.layerType)}</span> <b>${esc(meta.name)}</b><br><small>${formatBytes(meta.sizeBytes)} • ${esc(count)} • ${esc(meta.User?.name || '')}</small><div class="layer-row-actions"><button type="button" data-layer-action="zoom" data-layer-id="${meta.id}">Xem</button><button type="button" data-layer-action="toggle" data-layer-id="${meta.id}">Bật/tắt</button><button type="button" class="danger" data-layer-action="delete" data-layer-id="${meta.id}" data-layer-name="${esc(meta.name)}">Xóa</button></div></div>`);
   }
   if (!layers.length) list.innerHTML = '<div class="layer-empty">Chưa có lớp bản đồ được tải lên.</div>';
+  renderLayerStudio(layers);
 }
+
+
+const layerStudio=document.getElementById('layerStudio');
+const layerStudioButton=document.getElementById('reloadLayersBtn');
+function setLayerStudio(open){
+  layerStudio?.classList.toggle('is-hidden',!open);
+  layerStudioButton?.setAttribute('aria-expanded',String(open));
+  setTimeout(()=>map.invalidateSize(false),180);
+}
+layerStudioButton?.addEventListener('click',()=>setLayerStudio(layerStudio?.classList.contains('is-hidden')));
+document.getElementById('layerStudioClose')?.addEventListener('click',()=>setLayerStudio(false));
+document.getElementById('studioRefreshLayers')?.addEventListener('click',async()=>{await loadLayers();showToast('✓ Đã cập nhật lớp bản đồ');});
+const studioBaseMap={googleHybrid:googleHybridLayer,googleSatellite:googleSatelliteLayer,street:streetLayer,topo:topoLayer};
+document.querySelectorAll('input[name="studioBaseLayer"]').forEach(input=>input.addEventListener('change',()=>{
+  if(!input.checked)return;
+  Object.values(studioBaseMap).forEach(layer=>{if(map.hasLayer(layer))map.removeLayer(layer);});
+  if(usingGoogleDirect&&map.hasLayer(googleHybridDirect))map.removeLayer(googleHybridDirect);
+  if(usingGoogleSatelliteDirect&&map.hasLayer(googleSatelliteDirect))map.removeLayer(googleSatelliteDirect);
+  if(usingTopoFallback&&map.hasLayer(topoDirectFallback))map.removeLayer(topoDirectFallback);
+  studioBaseMap[input.value]?.addTo(map);
+  localStorage.setItem('hufm-base-layer',input.value);
+  status(`Đã chuyển sang ${input.closest('label')?.innerText?.trim()||'bản đồ nền'}.`);
+}));
+const savedBase=localStorage.getItem('hufm-base-layer')||'googleHybrid';
+const savedInput=document.querySelector(`input[name="studioBaseLayer"][value="${savedBase}"]`);
+if(savedInput){savedInput.checked=true;savedInput.dispatchEvent(new Event('change'));}
+document.getElementById('layerStudioList')?.addEventListener('input',event=>{
+  const card=event.target.closest('[data-studio-layer-id]'); if(!card)return;
+  const id=Number(card.dataset.studioLayerId),item=uploadedLayers.get(id); if(!item)return;
+  const setting=event.target.dataset.studioSetting; if(!setting)return;
+  if(setting==='opacity'){item.settings.opacity=Number(event.target.value)/100;event.target.nextElementSibling.textContent=`${event.target.value}%`;}
+  else if(setting==='labelSize') item.settings.labelSize=Number(event.target.value);
+  else item.settings[setting]=event.target.value;
+  saveLayerStyle(id,item.settings); applyVectorLayerSettings(item);
+});
+document.getElementById('layerStudioList')?.addEventListener('change',event=>{
+  if(event.target.dataset.studioSetting){
+    const card=event.target.closest('[data-studio-layer-id]'),item=uploadedLayers.get(Number(card?.dataset.studioLayerId));
+    if(item){const key=event.target.dataset.studioSetting;item.settings[key]=key==='labelSize'?Number(event.target.value):event.target.value;saveLayerStyle(item.meta.id,item.settings);applyVectorLayerSettings(item);}
+  }
+});
+document.getElementById('layerStudioList')?.addEventListener('click',async event=>{
+  const card=event.target.closest('[data-studio-layer-id]'); if(!card)return;
+  const id=Number(card.dataset.studioLayerId),item=uploadedLayers.get(id); if(!item)return;
+  const colorButton=event.target.closest('[data-style-color]');
+  if(colorButton){item.settings.color=colorButton.dataset.styleColor;saveLayerStyle(id,item.settings);applyVectorLayerSettings(item);card.querySelectorAll('.style-color').forEach(b=>b.classList.toggle('is-active',b===colorButton));return;}
+  const action=event.target.closest('[data-studio-action]')?.dataset.studioAction;
+  if(action==='toggle'){item.settings.visible=!item.settings.visible;saveLayerStyle(id,item.settings);applyVectorLayerSettings(item);await loadLayers();}
+  if(action==='delete'){await window.deleteLayer(id,event.target,item.meta.name);}
+});
 
 window.focusPoint = (a, b) => map.setView([a, b], 17);
 window.focusTrack = pts => { if (Array.isArray(pts) && pts.length) map.fitBounds(pts, { padding: [30, 30] }); };
@@ -704,7 +842,7 @@ document.getElementById('saveModal').onclick=async()=>{
 };
 
 function showToast(message){const toast=document.getElementById('appToast');if(!toast)return;toast.textContent=message;toast.classList.add('show');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>toast.classList.remove('show'),2200);}
-document.getElementById('reloadLayersBtn').onclick=async()=>{status('Đang tải lại các lớp bản đồ...');try{await loadLayers();map.invalidateSize(true);status('Đã cập nhật lớp bản đồ.');showToast('Đã cập nhật lớp bản đồ');}catch(e){status(e.message);}};
+
 document.getElementById('updateAppBtn').onclick=async()=>{
   const btn=document.getElementById('updateAppBtn');
   btn.disabled=true;btn.classList.add('is-spinning');status('Đang cập nhật dữ liệu và bản đồ...');showMapLoading('Đang cập nhật bản đồ…');

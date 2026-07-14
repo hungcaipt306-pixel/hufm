@@ -1,4 +1,4 @@
-const SHELL='hue-shell-v31-google-satellite-proxy', TILES='hue-offline-tiles-v1';
+const SHELL='hue-shell-v32-layer-studio', TILES='hue-offline-tiles-v1';
 const STATIC_ASSETS=['/style.css','/map.js','/offline-db.js','/manifest.webmanifest','/favicon.png','/logo-kiem-lam-hue.png','/vendor/leaflet/leaflet.css','/vendor/leaflet/leaflet.js','/vendor/vectorgrid/Leaflet.VectorGrid.bundled.js'];
 
 self.addEventListener('install',event=>{
