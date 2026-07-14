@@ -308,18 +308,6 @@ app.get('/api/base-tiles/topo/:z/:x/:y.png', async (req, res) => {
   const {z,x,y}=tile, sub=['a','b','c'][(x+y)%3];
   return proxyMapTile(res,`https://${sub}.tile.opentopomap.org/${z}/${x}/${y}.png`,'OpenTopoMap');
 });
-app.get('/api/base-tiles/satellite/:z/:x/:y.jpg', async (req, res) => {
-  const tile=validTileCoordinates(req,19); if(!tile) return res.status(400).end();
-  const {z,x,y}=tile;
-  return proxyMapTile(res,`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,'Esri World Imagery','image/jpeg');
-});
-app.get('/api/base-tiles/labels/:z/:x/:y.png', async (req, res) => {
-  const tile=validTileCoordinates(req,19); if(!tile) return res.status(400).end();
-  const {z,x,y}=tile;
-  const sub=['a','b','c','d'][(x+y)%4];
-  return proxyMapTile(res,`https://${sub}.basemaps.cartocdn.com/light_only_labels/${z}/${x}/${y}.png`,'OpenStreetMap/CARTO Labels','image/png');
-});
-
 const SequelizeStore = SequelizeStoreFactory(session.Store);
 const sessionStore = new SequelizeStore({ db: sequelize });
 app.use(session({

@@ -25,15 +25,8 @@ let usingTopoFallback=false;
 const googleHybridLayer=L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{
   ...commonTileOptions,maxZoom:22,subdomains:[],attribution:'Bản đồ &copy; Google'
 });
-const satelliteFallbackLayer=L.tileLayer('/api/base-tiles/satellite/{z}/{x}/{y}.jpg',{
-  ...commonTileOptions,maxZoom:19,attribution:'Ảnh vệ tinh dự phòng &copy; Esri'
-});
-const labelsLayer=L.tileLayer('/api/base-tiles/labels/{z}/{x}/{y}.png',{
-  ...commonTileOptions,maxZoom:19,pane:'overlayPane',attribution:'Nhãn địa danh dựa trên dữ liệu &copy; OpenStreetMap contributors; tiles &copy; CARTO'
-});
 streetLayer.addTo(map);
 let streetTileErrors=0,topoTileErrors=0,googleTileErrors=0;
-let usingSatelliteFallback=false;
 function attachTileStatus(layer,label,errorCounter){
   layer.on('loading',()=>showMapLoading(`Đang tải ${label}…`));
   layer.on('tileload',()=>{if(errorCounter==='street')streetTileErrors=0;if(errorCounter==='topo')topoTileErrors=0;if(errorCounter==='google')googleTileErrors=0;hideMapLoading();});
@@ -51,12 +44,9 @@ function attachTileStatus(layer,label,errorCounter){
     }
     if(errorCounter==='google'){
       googleTileErrors++;
-      if(googleTileErrors>=4 && map.hasLayer(googleHybridLayer) && !usingSatelliteFallback){
-        usingSatelliteFallback=true;
-        map.removeLayer(googleHybridLayer);
-        satelliteFallbackLayer.addTo(map);
-        if(!map.hasLayer(labelsLayer)) labelsLayer.addTo(map);
-        status('Nguồn Google Hybrid chưa phản hồi. Đang chuyển sang vệ tinh dự phòng kèm nhãn OpenStreetMap…');
+      if(googleTileErrors===4 && map.hasLayer(googleHybridLayer)){
+        hideMapLoading();
+        status('Google Satellite chưa tải được. Hãy kiểm tra kết nối hoặc bấm cập nhật lại.');
       }
     }
   });
@@ -65,7 +55,6 @@ attachTileStatus(streetLayer,'bản đồ đường phố','street');
 attachTileStatus(topoLayer,'bản đồ địa hình','topo');
 attachTileStatus(topoDirectFallback,'bản đồ địa hình dự phòng','topoFallback');
 attachTileStatus(googleHybridLayer,'Google Satellite Hybrid','google');
-attachTileStatus(satelliteFallbackLayer,'bản đồ vệ tinh dự phòng','satelliteFallback');
 setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-tile-loaded'))hideMapLoading();},900);
 
 const waypointLayer = L.layerGroup().addTo(map);
@@ -77,10 +66,9 @@ const uploadedLayers = new Map();
 const baseLayers={
   'Đường phố (OpenStreetMap)':streetLayer,
   'Địa hình & bình độ':topoLayer,
-  'Google vệ tinh + nhãn':googleHybridLayer,
-  'Vệ tinh dự phòng + nhãn OSM':satelliteFallbackLayer
+  'Google Satellite + nhãn Google':googleHybridLayer
 };
-const overlayLayers={Waypoint:waypointLayer,Tracklog:trackLayer,'Cảnh báo cháy rừng':fireAlertLayer,'Vùng nguy cơ cháy':fireRiskZoneLayer,'Bản đồ Việt Nam (Hoàng Sa, Trường Sa)':vietnamNationalLayer,'Nhãn chuẩn OpenStreetMap':labelsLayer};
+const overlayLayers={Waypoint:waypointLayer,Tracklog:trackLayer,'Cảnh báo cháy rừng':fireAlertLayer,'Vùng nguy cơ cháy':fireRiskZoneLayer,'Bản đồ Việt Nam (Hoàng Sa, Trường Sa)':vietnamNationalLayer};
 const layerControl = L.control.layers(
   baseLayers,
   overlayLayers,
@@ -88,13 +76,7 @@ const layerControl = L.control.layers(
 ).addTo(map);
 map.on('baselayerchange',event=>{
   if(event.layer===googleHybridLayer){
-    usingSatelliteFallback=false;
     googleTileErrors=0;
-    if(map.hasLayer(labelsLayer))map.removeLayer(labelsLayer);
-  } else if(event.layer===satelliteFallbackLayer){
-    if(!map.hasLayer(labelsLayer))labelsLayer.addTo(map);
-  } else if(map.hasLayer(labelsLayer)){
-    map.removeLayer(labelsLayer);
   }
   if(event.layer===topoLayer){
     usingTopoFallback=false;
@@ -718,13 +700,11 @@ document.getElementById('updateAppBtn').onclick=async()=>{
   try{
     await Promise.allSettled([loadData(),loadLayers(),loadFireWeather(false),loadFireAlerts()]);
     streetTileErrors=0;topoTileErrors=0;googleTileErrors=0;
-    if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer)&&!map.hasLayer(googleHybridLayer)&&!map.hasLayer(satelliteFallbackLayer))streetLayer.addTo(map);
+    if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer)&&!map.hasLayer(googleHybridLayer))streetLayer.addTo(map);
     if(map.hasLayer(streetLayer))streetLayer.redraw();
     if(map.hasLayer(topoLayer))topoLayer.redraw();
     if(map.hasLayer(topoDirectFallback))topoDirectFallback.redraw();
     if(map.hasLayer(googleHybridLayer))googleHybridLayer.redraw();
-    if(map.hasLayer(satelliteFallbackLayer))satelliteFallbackLayer.redraw();
-    if(map.hasLayer(labelsLayer))labelsLayer.redraw();
     map.invalidateSize(true);
     if('serviceWorker' in navigator){
       const reg=await navigator.serviceWorker.getRegistration();

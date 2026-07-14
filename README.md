@@ -167,8 +167,6 @@ HUFM có bốn lựa chọn hiển thị liên quan đến bản đồ nền:
 
 - **Đường phố**: OpenStreetMap.
 - **Địa hình & bình độ**: OpenTopoMap, được tải qua proxy cùng tên miền HUFM để ổn định hơn trên Safari/PWA.
-- **Vệ tinh**: Esri World Imagery.
-- **Nhãn địa danh**: lớp nhãn ranh giới/địa danh Esri; ứng dụng tự bật khi chọn Vệ tinh và có thể bật/tắt riêng trong bảng lớp.
 
 Các tile nền được máy chủ HUFM chuyển tiếp và cache ngắn hạn. Việc sử dụng trong môi trường chính thức cần tuân thủ điều khoản và ghi nguồn của từng nhà cung cấp.
 
@@ -176,14 +174,14 @@ Các tile nền được máy chủ HUFM chuyển tiếp và cache ngắn hạn.
 
 ## Không cần Google Maps API key
 
-Phiên bản này không phụ thuộc Google Maps. Các lớp nền mặc định gồm OpenStreetMap, OpenTopoMap và ảnh vệ tinh Esri kèm lớp nhãn địa danh. Không cần cấu hình `GOOGLE_MAPS_API_KEY`.
+Phiên bản này dùng Google Satellite Hybrid trực tiếp trong Leaflet để hiển thị ảnh vệ tinh và nhãn Google trong cùng một lớp; không còn lớp vệ tinh Esri/CARTO dự phòng.
 
 
 ## Nguồn bản đồ nền
 
 - Đường phố: OpenStreetMap.
 - Địa hình và bình độ: OpenTopoMap (dữ liệu OpenStreetMap và dữ liệu độ cao).
-- Vệ tinh: Esri World Imagery vì OpenStreetMap không cung cấp ảnh vệ tinh.
+- Vệ tinh: Google Satellite Hybrid, bao gồm nhãn Google trong cùng lớp.
 - Nhãn trên ảnh vệ tinh: lớp nhãn trong suốt CARTO dựa trên dữ liệu OpenStreetMap.
 
 Ứng dụng không yêu cầu Google Maps API key.
@@ -249,5 +247,12 @@ Vùng nguy cơ cháy là lớp minh họa theo dữ liệu khí tượng Open-Me
 
 - Bổ sung lớp `Google vệ tinh + nhãn` trong Leaflet, tương tự giao diện IFMC.
 - Không cần nhập API key trong phiên bản này vì sử dụng endpoint tile trực tiếp; nguồn này không phải tích hợp Map Tiles API chính thức và có thể thay đổi hoặc bị giới hạn.
-- Khi Google Hybrid lỗi nhiều tile liên tiếp, HUFM tự chuyển sang Esri World Imagery + nhãn OpenStreetMap để tránh bản đồ trắng.
+- Không tự chuyển sang nguồn vệ tinh khác; nếu Google Satellite không tải được, HUFM hiển thị cảnh báo để người dùng thử cập nhật hoặc kiểm tra kết nối.
 - Không tải lớp Google về dùng offline.
+
+
+## Bản v30 – Google Satellite duy nhất
+- Đã xóa lớp vệ tinh Esri dự phòng.
+- Đã xóa lớp nhãn OpenStreetMap/CARTO phủ riêng.
+- Tùy chọn vệ tinh duy nhất là **Google Satellite + nhãn Google**.
+- OpenStreetMap và OpenTopoMap vẫn được giữ làm các lớp đường phố và địa hình riêng.
