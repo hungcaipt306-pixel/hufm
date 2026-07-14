@@ -241,6 +241,7 @@ async function proxyMapTile(res, upstream, source, fallbackType='image/png') {
     return res.status(502).end();
   }
 }
+
 app.get('/api/base-tiles/osm/:z/:x/:y.png', async (req, res) => {
   const tile=validTileCoordinates(req,19); if(!tile) return res.status(400).end();
   const {z,x,y}=tile, sub=['a','b','c'][(x+y)%3];
@@ -259,7 +260,8 @@ app.get('/api/base-tiles/satellite/:z/:x/:y.jpg', async (req, res) => {
 app.get('/api/base-tiles/labels/:z/:x/:y.png', async (req, res) => {
   const tile=validTileCoordinates(req,19); if(!tile) return res.status(400).end();
   const {z,x,y}=tile;
-  return proxyMapTile(res,`https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${x}`,'Esri Reference Labels');
+  const sub=['a','b','c','d'][(x+y)%4];
+  return proxyMapTile(res,`https://${sub}.basemaps.cartocdn.com/light_only_labels/${z}/${x}/${y}.png`,'OpenStreetMap/CARTO Labels','image/png');
 });
 
 const SequelizeStore = SequelizeStoreFactory(session.Store);
@@ -881,14 +883,33 @@ app.get('/api/layers/:id/tiles/:z/:x/:y.:ext', requireAuth, async (req, res) => 
   res.type(contentTypes[format] || 'application/octet-stream').send(Buffer.from(row.tile_data));
 });
 
-app.delete('/api/layers/:id', requireAuth, async (req, res) => {
-  const layer = await MapLayer.findByPk(req.params.id);
-  if (!layer) return res.status(404).json({ error: 'Không tìm thấy lớp bản đồ.' });
-  if (!canAccessRecord(req.session.user, layer)) return res.status(403).json({ error: 'Không có quyền.' });
-  const db = mbtilesCache.get(layer.id); if (db) { try { db.close(); } catch {} mbtilesCache.delete(layer.id); }
-  await layer.destroy();
-  res.json({ ok: true });
-});
+async function deleteMapLayer(req, res) {
+  try {
+    const layerId = Number(req.params.id);
+    if (!Number.isInteger(layerId) || layerId <= 0) return res.status(400).json({ error: 'Mã lớp bản đồ không hợp lệ.' });
+    const layer = await MapLayer.findByPk(layerId);
+    if (!layer) return res.status(404).json({ error: 'Không tìm thấy lớp bản đồ hoặc lớp đã được xóa.' });
+    if (!canAccessRecord(req.session.user, layer)) return res.status(403).json({ error: 'Bạn không có quyền xóa lớp bản đồ này.' });
+
+    const db = mbtilesCache.get(layer.id);
+    if (db) {
+      try { db.close(); } catch (error) { console.warn('Không thể đóng MBTiles cache:', error.message); }
+      mbtilesCache.delete(layer.id);
+    }
+
+    const deleted = await MapLayer.destroy({ where: { id: layer.id } });
+    if (!deleted) return res.status(409).json({ error: 'Lớp bản đồ chưa được xóa. Vui lòng thử lại.' });
+    res.setHeader('Cache-Control', 'no-store');
+    return res.json({ ok: true, id: layer.id, message: 'Đã xóa lớp bản đồ thành công.' });
+  } catch (error) {
+    console.error('deleteMapLayer error:', error);
+    return res.status(500).json({ error: error.message || 'Không thể xóa lớp bản đồ.' });
+  }
+}
+
+app.delete('/api/layers/:id', requireAuth, deleteMapLayer);
+// Endpoint POST dự phòng cho Safari/PWA hoặc proxy không chuyển tiếp phương thức DELETE ổn định.
+app.post('/api/layers/:id/delete', requireAuth, deleteMapLayer);
 
 app.get('/admin/users', requireRole('admin'), async (req, res) => {
   const users = await User.findAll({ include: Group, order: [['createdAt','DESC']] });

@@ -10,53 +10,50 @@ const showMapLoading=(message='Đang tải bản đồ…')=>{if(mapLoading){map
 window.addEventListener('load', () => setTimeout(() => map.invalidateSize(true), 180));
 window.addEventListener('resize', () => map.invalidateSize(false));
 if('ResizeObserver' in window){new ResizeObserver(()=>map.invalidateSize(false)).observe(document.getElementById('map'));}
-const tileOptions={maxZoom:19,updateWhenIdle:false,keepBuffer:4,crossOrigin:true,attribution:'&copy; OpenStreetMap contributors'};
-// Các lớp nền đi qua máy chủ HUFM để tránh lỗi CSP/CDN trên Safari/PWA.
-const streetProxyUrl='/api/base-tiles/osm/{z}/{x}/{y}.png';
-const streetDirectUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
-const topoProxyUrl='/api/base-tiles/topo/{z}/{x}/{y}.png';
-const satelliteProxyUrl='/api/base-tiles/satellite/{z}/{x}/{y}.jpg';
-const labelsProxyUrl='/api/base-tiles/labels/{z}/{x}/{y}.png';
-const streetLayer=L.tileLayer(streetProxyUrl,tileOptions).addTo(map);
-const topoLayer=L.tileLayer(topoProxyUrl,{...tileOptions,maxZoom:17,attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap'});
-const satelliteLayer=L.tileLayer(satelliteProxyUrl,{...tileOptions,maxZoom:19,attribution:'Ảnh vệ tinh &copy; Esri và các nhà cung cấp dữ liệu'});
-const labelsLayer=L.tileLayer(labelsProxyUrl,{...tileOptions,maxZoom:19,pane:'overlayPane',opacity:1,attribution:'Nhãn bản đồ &copy; Esri'});
-let streetTileErrors=0,topoTileErrors=0,satelliteTileErrors=0,streetSource='proxy',fallbackActivated=false;
-streetLayer.on('loading',()=>showMapLoading('Đang tải OpenStreetMap…'));
-streetLayer.on('tileload',()=>{streetTileErrors=0;hideMapLoading();});
-streetLayer.on('load',()=>{hideMapLoading();status('Bản đồ OpenStreetMap đã sẵn sàng.');});
-streetLayer.on('tileerror',()=>{
-  streetTileErrors++;
-  if(streetTileErrors<4)return;
-  if(streetSource==='proxy'){
-    streetSource='direct';streetTileErrors=0;streetLayer.setUrl(streetDirectUrl,false);streetLayer.redraw();
-    showMapLoading('Đang thử nguồn OpenStreetMap dự phòng…');status('Đang chuyển sang nguồn OpenStreetMap dự phòng.');return;
-  }
-  if(!fallbackActivated){fallbackActivated=true;map.removeLayer(streetLayer);topoLayer.addTo(map);showMapLoading('Đang chuyển sang bản đồ địa hình…');status('OpenStreetMap tạm thời không phản hồi, đã chuyển sang địa hình dự phòng.');}
+const commonTileOptions={updateWhenIdle:false,keepBuffer:4,crossOrigin:true};
+const streetLayer=L.tileLayer('/api/base-tiles/osm/{z}/{x}/{y}.png',{
+  ...commonTileOptions,maxZoom:19,attribution:'&copy; OpenStreetMap contributors'
 });
-topoLayer.on('loading',()=>showMapLoading('Đang tải bản đồ địa hình…'));
-topoLayer.on('tileload',()=>{topoTileErrors=0;hideMapLoading();});
-topoLayer.on('load',()=>{hideMapLoading();status('Bản đồ địa hình và bình độ đã sẵn sàng.');});
-topoLayer.on('tileerror',()=>{topoTileErrors++;if(topoTileErrors>=5){hideMapLoading();status('Không tải được lớp địa hình. Hãy thử lớp Đường phố hoặc Vệ tinh.');}});
-satelliteLayer.on('loading',()=>showMapLoading('Đang tải ảnh vệ tinh…'));
-satelliteLayer.on('tileload',()=>{satelliteTileErrors=0;hideMapLoading();});
-satelliteLayer.on('load',()=>{hideMapLoading();status('Ảnh vệ tinh đã sẵn sàng.');});
-satelliteLayer.on('tileerror',()=>{satelliteTileErrors++;if(satelliteTileErrors>=5){hideMapLoading();status('Không tải được ảnh vệ tinh. Kiểm tra Internet rồi bấm Cập nhật.');}});
+const topoLayer=L.tileLayer('/api/base-tiles/topo/{z}/{x}/{y}.png',{
+  ...commonTileOptions,maxZoom:17,attribution:'Bản đồ địa hình &copy; OpenTopoMap; dữ liệu &copy; OpenStreetMap contributors'
+});
+const satelliteLayer=L.tileLayer('/api/base-tiles/satellite/{z}/{x}/{y}.jpg',{
+  ...commonTileOptions,maxZoom:19,attribution:'Ảnh vệ tinh &copy; Esri; dữ liệu nhãn &copy; OpenStreetMap contributors'
+});
+const labelsLayer=L.tileLayer('/api/base-tiles/labels/{z}/{x}/{y}.png',{
+  ...commonTileOptions,maxZoom:19,pane:'overlayPane',attribution:'Nhãn địa danh dựa trên dữ liệu &copy; OpenStreetMap contributors; tiles &copy; CARTO'
+});
+streetLayer.addTo(map);
+let streetTileErrors=0,topoTileErrors=0,satelliteTileErrors=0;
+function attachTileStatus(layer,label,errorCounter){
+  layer.on('loading',()=>showMapLoading(`Đang tải ${label}…`));
+  layer.on('tileload',()=>{if(errorCounter==='street')streetTileErrors=0;if(errorCounter==='topo')topoTileErrors=0;if(errorCounter==='satellite')satelliteTileErrors=0;hideMapLoading();});
+  layer.on('load',()=>{hideMapLoading();status(`${label} đã sẵn sàng.`);});
+  layer.on('tileerror',()=>{if(errorCounter==='street')streetTileErrors++;if(errorCounter==='topo')topoTileErrors++;if(errorCounter==='satellite')satelliteTileErrors++;});
+}
+attachTileStatus(streetLayer,'bản đồ đường phố','street');
+attachTileStatus(topoLayer,'bản đồ địa hình','topo');
+attachTileStatus(satelliteLayer,'bản đồ vệ tinh','satellite');
 setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-tile-loaded'))hideMapLoading();},900);
 
 const waypointLayer = L.layerGroup().addTo(map);
 const trackLayer = L.layerGroup().addTo(map);
 const fireAlertLayer = L.layerGroup().addTo(map);
 const uploadedLayers = new Map();
+const baseLayers={
+  'Đường phố (OpenStreetMap)':streetLayer,
+  'Địa hình & bình độ':topoLayer,
+  'Vệ tinh + nhãn OSM':satelliteLayer
+};
+const overlayLayers={Waypoint:waypointLayer,Tracklog:trackLayer,'Cảnh báo cháy rừng':fireAlertLayer,'Nhãn OpenStreetMap':labelsLayer};
 const layerControl = L.control.layers(
-  { 'Đường phố': streetLayer, 'Địa hình & bình độ': topoLayer, 'Vệ tinh': satelliteLayer },
-  { 'Nhãn địa danh': labelsLayer, Waypoint: waypointLayer, Tracklog: trackLayer, 'Cảnh báo cháy rừng': fireAlertLayer },
+  baseLayers,
+  overlayLayers,
   { collapsed: true, position: 'topleft' }
 ).addTo(map);
-map.on('baselayerchange',(event)=>{
-  // Ảnh vệ tinh khó đọc nếu thiếu địa danh; tự bật nhãn khi chọn vệ tinh.
-  if(event.layer===satelliteLayer && !map.hasLayer(labelsLayer)) labelsLayer.addTo(map);
-  if(event.layer!==satelliteLayer && map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer);
+map.on('baselayerchange',event=>{
+  if(event.layer===satelliteLayer&&!map.hasLayer(labelsLayer))labelsLayer.addTo(map);
+  if(event.layer!==satelliteLayer&&map.hasLayer(labelsLayer))map.removeLayer(labelsLayer);
   setTimeout(()=>map.invalidateSize(false),80);
 });
 
@@ -209,7 +206,7 @@ async function loadLayers() {
       try { await createUploadedLayer(meta); } catch (e) { console.error(e); }
     }
     const count = meta.layerType === 'mbtiles' ? `${meta.metadata?.tileCount || 0} tile` : `${meta.metadata?.featureCount || 0} đối tượng`;
-    list.insertAdjacentHTML('beforeend', `<div class="data-item"><span class="layer-type">${esc(meta.layerType)}</span> <b>${esc(meta.name)}</b><br><small>${formatBytes(meta.sizeBytes)} • ${esc(count)} • ${esc(meta.User?.name || '')}</small><div class="layer-row-actions"><button onclick="zoomLayer(${meta.id})">Xem</button><button onclick="toggleLayer(${meta.id})">Bật/tắt</button><button class="danger" onclick="deleteLayer(${meta.id})">Xóa</button></div></div>`);
+    list.insertAdjacentHTML('beforeend', `<div class="data-item" data-layer-id="${meta.id}"><span class="layer-type">${esc(meta.layerType)}</span> <b>${esc(meta.name)}</b><br><small>${formatBytes(meta.sizeBytes)} • ${esc(count)} • ${esc(meta.User?.name || '')}</small><div class="layer-row-actions"><button type="button" onclick="zoomLayer(${meta.id})">Xem</button><button type="button" onclick="toggleLayer(${meta.id})">Bật/tắt</button><button type="button" class="danger" onclick="deleteLayer(${meta.id}, this)">Xóa</button></div></div>`);
   }
   if (!layers.length) list.innerHTML = '<div class="layer-empty">Chưa có lớp bản đồ được tải lên.</div>';
 }
@@ -234,18 +231,30 @@ window.zoomLayer = id => {
   const b = String(item.meta.metadata?.bounds || '').split(',').map(Number);
   if (b.length === 4 && b.every(Number.isFinite)) map.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [25, 25] });
 };
-window.deleteLayer = async id => {
-  if (!confirm('Xóa lớp bản đồ này?')) return;
+window.deleteLayer = async (id, button) => {
+  if (!confirm('Bạn có chắc muốn xóa lớp bản đồ này? Thao tác không thể hoàn tác.')) return;
+  const originalText = button?.textContent || 'Xóa';
+  if (button) { button.disabled = true; button.textContent = 'Đang xóa…'; }
   try {
-    await api(`/api/layers/${id}`, { method:'DELETE' });
-    removeUploadedLayer(id);
+    let result;
+    try {
+      result = await api(`/api/layers/${id}`, { method:'DELETE', cache:'no-store' });
+    } catch (deleteError) {
+      // Một số WebView/Safari hoặc proxy có thể chặn DELETE; thử endpoint POST dự phòng.
+      result = await api(`/api/layers/${id}/delete`, { method:'POST', body: JSON.stringify({}), cache:'no-store' });
+    }
+    removeUploadedLayer(Number(id));
+    document.querySelector(`[data-layer-id="${Number(id)}"]`)?.remove();
     await loadLayers();
-    map.invalidateSize(false);
-    status('Đã xóa lớp bản đồ thành công và tự động cập nhật lại.');
+    map.invalidateSize(true);
+    status(result?.message || 'Đã xóa lớp bản đồ thành công và tự động cập nhật lại.');
     showToast('Đã xóa lớp bản đồ thành công');
   } catch(error) {
+    console.error('Không thể xóa lớp bản đồ:', error);
     status(`Không thể xóa lớp: ${error.message}`);
-    showToast('Xóa lớp chưa thành công');
+    showToast(error.message || 'Xóa lớp chưa thành công');
+  } finally {
+    if (button?.isConnected) { button.disabled = false; button.textContent = originalText; }
   }
 };
 
@@ -399,10 +408,12 @@ document.getElementById('updateAppBtn').onclick=async()=>{
   btn.disabled=true;btn.classList.add('is-spinning');status('Đang cập nhật dữ liệu và bản đồ...');showMapLoading('Đang cập nhật bản đồ…');
   try{
     await Promise.allSettled([loadData(),loadLayers(),loadFireWeather(false),loadFireAlerts()]);
-    streetTileErrors=0;topoTileErrors=0;fallbackActivated=false;
-    if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer))streetLayer.addTo(map);
+    streetTileErrors=0;topoTileErrors=0;satelliteTileErrors=0;
+    if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer)&&!map.hasLayer(satelliteLayer))streetLayer.addTo(map);
     if(map.hasLayer(streetLayer))streetLayer.redraw();
     if(map.hasLayer(topoLayer))topoLayer.redraw();
+    if(map.hasLayer(satelliteLayer))satelliteLayer.redraw();
+    if(map.hasLayer(labelsLayer))labelsLayer.redraw();
     map.invalidateSize(true);
     if('serviceWorker' in navigator){
       const reg=await navigator.serviceWorker.getRegistration();

@@ -171,3 +171,19 @@ HUFM có bốn lựa chọn hiển thị liên quan đến bản đồ nền:
 - **Nhãn địa danh**: lớp nhãn ranh giới/địa danh Esri; ứng dụng tự bật khi chọn Vệ tinh và có thể bật/tắt riêng trong bảng lớp.
 
 Các tile nền được máy chủ HUFM chuyển tiếp và cache ngắn hạn. Việc sử dụng trong môi trường chính thức cần tuân thủ điều khoản và ghi nguồn của từng nhà cung cấp.
+
+
+
+## Không cần Google Maps API key
+
+Phiên bản này không phụ thuộc Google Maps. Các lớp nền mặc định gồm OpenStreetMap, OpenTopoMap và ảnh vệ tinh Esri kèm lớp nhãn địa danh. Không cần cấu hình `GOOGLE_MAPS_API_KEY`.
+
+
+## Nguồn bản đồ nền
+
+- Đường phố: OpenStreetMap.
+- Địa hình và bình độ: OpenTopoMap (dữ liệu OpenStreetMap và dữ liệu độ cao).
+- Vệ tinh: Esri World Imagery vì OpenStreetMap không cung cấp ảnh vệ tinh.
+- Nhãn trên ảnh vệ tinh: lớp nhãn trong suốt CARTO dựa trên dữ liệu OpenStreetMap.
+
+Ứng dụng không yêu cầu Google Maps API key.
