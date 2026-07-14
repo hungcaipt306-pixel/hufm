@@ -10,13 +10,18 @@ const showMapLoading=(message='Đang tải bản đồ…')=>{if(mapLoading){map
 window.addEventListener('load', () => setTimeout(() => map.invalidateSize(true), 180));
 window.addEventListener('resize', () => map.invalidateSize(false));
 if('ResizeObserver' in window){new ResizeObserver(()=>map.invalidateSize(false)).observe(document.getElementById('map'));}
-const commonTileOptions={updateWhenIdle:false,keepBuffer:4,crossOrigin:true};
+const commonTileOptions={updateWhenIdle:false,keepBuffer:4};
 const streetLayer=L.tileLayer('/api/base-tiles/osm/{z}/{x}/{y}.png',{
   ...commonTileOptions,maxZoom:19,attribution:'&copy; OpenStreetMap contributors'
 });
 const topoLayer=L.tileLayer('/api/base-tiles/topo/{z}/{x}/{y}.png',{
   ...commonTileOptions,maxZoom:17,attribution:'Bản đồ địa hình &copy; OpenTopoMap; dữ liệu &copy; OpenStreetMap contributors'
 });
+const topoDirectFallback=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{
+  updateWhenIdle:false,keepBuffer:4,maxZoom:17,subdomains:'abc',
+  attribution:'Bản đồ địa hình &copy; OpenTopoMap; dữ liệu &copy; OpenStreetMap contributors'
+});
+let usingTopoFallback=false;
 const satelliteLayer=L.tileLayer('/api/base-tiles/satellite/{z}/{x}/{y}.jpg',{
   ...commonTileOptions,maxZoom:19,attribution:'Ảnh vệ tinh &copy; Esri; dữ liệu nhãn &copy; OpenStreetMap contributors'
 });
@@ -29,10 +34,23 @@ function attachTileStatus(layer,label,errorCounter){
   layer.on('loading',()=>showMapLoading(`Đang tải ${label}…`));
   layer.on('tileload',()=>{if(errorCounter==='street')streetTileErrors=0;if(errorCounter==='topo')topoTileErrors=0;if(errorCounter==='satellite')satelliteTileErrors=0;hideMapLoading();});
   layer.on('load',()=>{hideMapLoading();status(`${label} đã sẵn sàng.`);});
-  layer.on('tileerror',()=>{if(errorCounter==='street')streetTileErrors++;if(errorCounter==='topo')topoTileErrors++;if(errorCounter==='satellite')satelliteTileErrors++;});
+  layer.on('tileerror',()=>{
+    if(errorCounter==='street')streetTileErrors++;
+    if(errorCounter==='topo'){
+      topoTileErrors++;
+      if(topoTileErrors>=4 && map.hasLayer(topoLayer) && !usingTopoFallback){
+        usingTopoFallback=true;
+        map.removeLayer(topoLayer);
+        topoDirectFallback.addTo(map);
+        status('Nguồn địa hình qua máy chủ chưa phản hồi. Đang chuyển sang nguồn OpenTopoMap dự phòng…');
+      }
+    }
+    if(errorCounter==='satellite')satelliteTileErrors++;
+  });
 }
 attachTileStatus(streetLayer,'bản đồ đường phố','street');
 attachTileStatus(topoLayer,'bản đồ địa hình','topo');
+attachTileStatus(topoDirectFallback,'bản đồ địa hình dự phòng','topoFallback');
 attachTileStatus(satelliteLayer,'bản đồ vệ tinh','satellite');
 setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-tile-loaded'))hideMapLoading();},900);
 
@@ -55,6 +73,10 @@ const layerControl = L.control.layers(
 map.on('baselayerchange',event=>{
   if(event.layer===satelliteLayer&&!map.hasLayer(labelsLayer))labelsLayer.addTo(map);
   if(event.layer!==satelliteLayer&&map.hasLayer(labelsLayer))map.removeLayer(labelsLayer);
+  if(event.layer===topoLayer){
+    usingTopoFallback=false;
+    topoTileErrors=0;
+  }
   setTimeout(()=>map.invalidateSize(false),80);
 });
 
@@ -530,6 +552,7 @@ document.getElementById('updateAppBtn').onclick=async()=>{
     if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer)&&!map.hasLayer(satelliteLayer))streetLayer.addTo(map);
     if(map.hasLayer(streetLayer))streetLayer.redraw();
     if(map.hasLayer(topoLayer))topoLayer.redraw();
+    if(map.hasLayer(topoDirectFallback))topoDirectFallback.redraw();
     if(map.hasLayer(satelliteLayer))satelliteLayer.redraw();
     if(map.hasLayer(labelsLayer))labelsLayer.redraw();
     map.invalidateSize(true);
@@ -661,7 +684,7 @@ function tileUrls(bounds,minZ,maxZ,template){const urls=[];for(let z=minZ;z<=max
 document.getElementById('downloadOfflineBtn').onclick=async()=>{const box=document.getElementById('offlineStatus');if(!('serviceWorker'in navigator)){box.textContent='Trình duyệt không hỗ trợ PWA offline.';return;}const [a,b]=document.getElementById('offlineZoom').value.split('-').map(Number);const urls=tileUrls(map.getBounds(),a,b,appConfig.offlineTileUrl);if(urls.length>appConfig.offlineTileMax){box.textContent=`Vùng quá lớn (${urls.length} tile). Hãy phóng to hoặc chọn mức zoom thấp hơn; giới hạn ${appConfig.offlineTileMax}.`;return;}box.textContent=`Đang tải ${urls.length} tile... Không đóng ứng dụng.`;const reg=await navigator.serviceWorker.ready;reg.active.postMessage({type:'CACHE_TILES',urls});};
 document.getElementById('clearOfflineBtn').onclick=async()=>{if(!confirm('Xóa toàn bộ tile bản đồ đã tải offline?'))return;const reg=await navigator.serviceWorker.ready;reg.active.postMessage({type:'CLEAR_TILES'});};
 navigator.serviceWorker?.addEventListener('message',e=>{const d=e.data||{},box=document.getElementById('offlineStatus');if(d.type==='CACHE_PROGRESS')box.textContent=`Đã tải ${d.done}/${d.total} tile (${d.failed} lỗi)`;if(d.type==='CACHE_DONE')box.textContent=`Hoàn tất: ${d.done-d.failed}/${d.total} tile sẵn sàng offline.`;if(d.type==='TILES_CLEARED')box.textContent='Đã xóa bản đồ offline.';});
-(async()=>{try{appConfig=await api('/api/app-config');topoLayer.setUrl(appConfig.topoTileUrl);}catch(_){ }await updateNetworkUI();if(navigator.onLine)syncPending();})();
+(async()=>{try{appConfig=await api('/api/app-config');}catch(_){ }await updateNetworkUI();if(navigator.onLine)syncPending();})();
 
 setTimeout(() => map.invalidateSize(true), 350);
 

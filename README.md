@@ -203,3 +203,9 @@ Nguồn tham khảo dữ liệu: Natural Earth (đường bao đất liền khá
 ## Sửa lỗi xóa lớp bản đồ
 
 Phiên bản này thay các sự kiện `onclick` nội tuyến bằng event delegation. Nhờ đó nút Xóa hoạt động ổn định với tên lớp tiếng Việt, dấu nháy, Safari và PWA. Trước khi xóa, ứng dụng hiển thị hộp xác nhận; sau khi máy chủ xác nhận thành công, lớp được gỡ khỏi bản đồ, danh sách lớp được tải lại và thông báo thành công được hiển thị.
+
+
+## Sửa lớp địa hình v21
+- Không còn ghi đè URL tile proxy bằng URL OpenTopoMap trực tiếp.
+- Không đặt crossOrigin cho ảnh tile, tương thích Safari/PWA.
+- Tự chuyển sang nguồn OpenTopoMap trực tiếp nếu proxy địa hình lỗi nhiều lần.

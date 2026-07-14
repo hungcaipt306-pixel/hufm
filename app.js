@@ -267,12 +267,31 @@ app.get('/api/base-tiles/labels/:z/:x/:y.png', async (req, res) => {
 const SequelizeStore = SequelizeStoreFactory(session.Store);
 const sessionStore = new SequelizeStore({ db: sequelize });
 app.use(session({
+  name: 'hufm.sid',
   secret: process.env.SESSION_SECRET || 'dev-only-change-this-secret',
   store: sessionStore,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, secure: isProduction, sameSite: 'lax', maxAge: 1000 * 60 * 60 * 12 }
+  rolling: true,
+  proxy: isProduction,
+  cookie: {
+    httpOnly: true,
+    secure: isProduction ? 'auto' : false,
+    sameSite: 'lax',
+    path: '/',
+    maxAge: 1000 * 60 * 60 * 12
+  }
 }));
+
+// Không cho trình duyệt/PWA cache các trang xác thực hoặc phản hồi chứa phiên đăng nhập.
+app.use((req, res, next) => {
+  if (req.path === '/login' || req.path === '/register' || req.path === '/logout' || req.path.startsWith('/admin/')) {
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+    res.setHeader('Pragma', 'no-cache');
+    res.setHeader('Expires', '0');
+  }
+  next();
+});
 
 app.use((req, res, next) => {
   res.locals.currentUser = req.session.user || null;
@@ -563,18 +582,51 @@ app.post('/register', async (req, res) => {
 
 app.get('/login', (req, res) => res.render('login'));
 app.post('/login', async (req, res) => {
-  const email = loginKeyToEmail(req.body.username || req.body.email);
-  const user = await User.findOne({ where: { email }, include: Group });
-  if (!user || !(await bcrypt.compare(req.body.password || '', user.passwordHash))) {
-    flash(req, 'error', 'Tên đăng nhập hoặc mật khẩu không đúng.'); return res.redirect('/login');
+  try {
+    const email = loginKeyToEmail(req.body.username || req.body.email);
+    const user = await User.findOne({ where: { email }, include: Group });
+    if (!user || !(await bcrypt.compare(req.body.password || '', user.passwordHash))) {
+      flash(req, 'error', 'Tên đăng nhập hoặc mật khẩu không đúng.');
+      return req.session.save(() => res.redirect('/login'));
+    }
+    if (user.status !== 'approved') {
+      flash(req, 'error', user.status === 'pending' ? 'Tài khoản đang chờ phê duyệt.' : 'Tài khoản đã bị từ chối.');
+      return req.session.save(() => res.redirect('/login'));
+    }
+
+    // Tạo session mới và chờ session store ghi xong trước khi chuyển sang bản đồ.
+    return req.session.regenerate(error => {
+      if (error) {
+        console.error('Không thể tạo phiên đăng nhập:', error);
+        return res.status(500).render('error', { message: 'Không thể tạo phiên đăng nhập. Vui lòng thử lại.' });
+      }
+      req.session.user = {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        username: displayLogin(user.email),
+        role: user.role,
+        groupId: user.groupId,
+        groupName: user.Group?.name || null
+      };
+      req.session.save(saveError => {
+        if (saveError) {
+          console.error('Không thể lưu phiên đăng nhập:', saveError);
+          return res.status(500).render('error', { message: 'Không thể lưu phiên đăng nhập. Vui lòng thử lại.' });
+        }
+        res.redirect(303, '/map');
+      });
+    });
+  } catch (error) {
+    console.error('Lỗi đăng nhập:', error);
+    flash(req, 'error', 'Không thể đăng nhập lúc này. Vui lòng thử lại.');
+    req.session.save(() => res.redirect('/login'));
   }
-  if (user.status !== 'approved') {
-    flash(req, 'error', user.status === 'pending' ? 'Tài khoản đang chờ phê duyệt.' : 'Tài khoản đã bị từ chối.'); return res.redirect('/login');
-  }
-  req.session.user = { id: user.id, name: user.name, email: user.email, username: displayLogin(user.email), role: user.role, groupId: user.groupId, groupName: user.Group?.name || null };
-  res.redirect('/map');
 });
-app.post('/logout', (req, res) => req.session.destroy(() => res.redirect('/login')));
+app.post('/logout', (req, res) => req.session.destroy(() => {
+  res.clearCookie('hufm.sid', { path: '/', sameSite: 'lax', secure: isProduction });
+  res.redirect('/login');
+}));
 
 app.get('/dashboard', requireAuth, async (req, res) => {
   const scope = dataScope(req.session.user);
@@ -705,7 +757,7 @@ app.get('/api/fire-alerts', requireAuth, async (req, res) => {
 
 
 app.get('/api/app-config', requireAuth, (req, res) => {
-  res.json({ topoTileUrl: TOPO_TILE_URL, offlineTileUrl: OFFLINE_TILE_URL, offlineTileMax: OFFLINE_TILE_MAX });
+  res.json({ offlineTileUrl: OFFLINE_TILE_URL, offlineTileMax: OFFLINE_TILE_MAX });
 });
 
 app.post('/api/sync', requireAuth, async (req, res) => {
