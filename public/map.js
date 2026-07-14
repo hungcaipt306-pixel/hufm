@@ -263,7 +263,7 @@ async function loadLayers() {
       try { await createUploadedLayer(meta); } catch (e) { console.error(e); }
     }
     const count = meta.layerType === 'mbtiles' ? `${meta.metadata?.tileCount || 0} tile` : `${meta.metadata?.featureCount || 0} đối tượng`;
-    list.insertAdjacentHTML('beforeend', `<div class="data-item" data-layer-id="${meta.id}"><span class="layer-type">${esc(meta.layerType)}</span> <b>${esc(meta.name)}</b><br><small>${formatBytes(meta.sizeBytes)} • ${esc(count)} • ${esc(meta.User?.name || '')}</small><div class="layer-row-actions"><button type="button" onclick="zoomLayer(${meta.id})">Xem</button><button type="button" onclick="toggleLayer(${meta.id})">Bật/tắt</button><button type="button" class="danger" onclick="deleteLayer(${meta.id}, this, ${JSON.stringify(meta.name)})">Xóa</button></div></div>`);
+    list.insertAdjacentHTML('beforeend', `<div class="data-item" data-layer-id="${meta.id}"><span class="layer-type">${esc(meta.layerType)}</span> <b>${esc(meta.name)}</b><br><small>${formatBytes(meta.sizeBytes)} • ${esc(count)} • ${esc(meta.User?.name || '')}</small><div class="layer-row-actions"><button type="button" data-layer-action="zoom" data-layer-id="${meta.id}">Xem</button><button type="button" data-layer-action="toggle" data-layer-id="${meta.id}">Bật/tắt</button><button type="button" class="danger" data-layer-action="delete" data-layer-id="${meta.id}" data-layer-name="${esc(meta.name)}">Xóa</button></div></div>`);
   }
   if (!layers.length) list.innerHTML = '<div class="layer-empty">Chưa có lớp bản đồ được tải lên.</div>';
 }
@@ -288,6 +288,27 @@ window.zoomLayer = id => {
   const b = String(item.meta.metadata?.bounds || '').split(',').map(Number);
   if (b.length === 4 && b.every(Number.isFinite)) map.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [25, 25] });
 };
+
+// Dùng event delegation thay cho onclick nội tuyến. Cách này hoạt động ổn định
+// với tên lớp có dấu, dấu nháy và trong Safari/PWA.
+const layerListElement = document.getElementById('layerList');
+layerListElement?.addEventListener('click', async event => {
+  const button = event.target.closest('button[data-layer-action]');
+  if (!button || !layerListElement.contains(button)) return;
+  event.preventDefault();
+  event.stopPropagation();
+  const id = Number(button.dataset.layerId);
+  if (!Number.isInteger(id) || id <= 0) {
+    showToast('Không xác định được lớp bản đồ.');
+    return;
+  }
+  const action = button.dataset.layerAction;
+  if (action === 'zoom') return window.zoomLayer(id);
+  if (action === 'toggle') return window.toggleLayer(id);
+  if (action === 'delete') {
+    await window.deleteLayer(id, button, button.dataset.layerName || '');
+  }
+});
 function askDeleteLayer(layerName = '') {
   const modal = document.getElementById('confirmDeleteModal');
   const nameBox = document.getElementById('confirmDeleteLayerName');

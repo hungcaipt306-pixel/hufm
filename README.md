@@ -199,3 +199,7 @@ Nguồn tham khảo dữ liệu: Natural Earth (đường bao đất liền khá
 - Tài khoản email cũ vẫn đăng nhập được bằng địa chỉ email đầy đủ.
 - CSV nhập hàng loạt dùng cột `username` thay cho `email`.
 - Trên PWA cài ở màn hình chính, nút **Công cụ** luôn nổi trên bản đồ và mở panel có thanh cuộn độc lập.
+
+## Sửa lỗi xóa lớp bản đồ
+
+Phiên bản này thay các sự kiện `onclick` nội tuyến bằng event delegation. Nhờ đó nút Xóa hoạt động ổn định với tên lớp tiếng Việt, dấu nháy, Safari và PWA. Trước khi xóa, ứng dụng hiển thị hộp xác nhận; sau khi máy chủ xác nhận thành công, lớp được gỡ khỏi bản đồ, danh sách lớp được tải lại và thông báo thành công được hiển thị.
