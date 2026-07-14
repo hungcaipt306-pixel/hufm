@@ -10,13 +10,18 @@ const showMapLoading=(message='Đang tải bản đồ…')=>{if(mapLoading){map
 window.addEventListener('load', () => setTimeout(() => map.invalidateSize(true), 180));
 window.addEventListener('resize', () => map.invalidateSize(false));
 if('ResizeObserver' in window){new ResizeObserver(()=>map.invalidateSize(false)).observe(document.getElementById('map'));}
-const tileOptions={maxZoom:19,updateWhenIdle:false,keepBuffer:4,attribution:'&copy; OpenStreetMap contributors'};
-// Ưu tiên proxy cùng tên miền HUFM; nếu proxy lỗi sẽ thử OSM trực tiếp rồi mới chuyển địa hình.
+const tileOptions={maxZoom:19,updateWhenIdle:false,keepBuffer:4,crossOrigin:true,attribution:'&copy; OpenStreetMap contributors'};
+// Các lớp nền đi qua máy chủ HUFM để tránh lỗi CSP/CDN trên Safari/PWA.
 const streetProxyUrl='/api/base-tiles/osm/{z}/{x}/{y}.png';
 const streetDirectUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const topoProxyUrl='/api/base-tiles/topo/{z}/{x}/{y}.png';
+const satelliteProxyUrl='/api/base-tiles/satellite/{z}/{x}/{y}.jpg';
+const labelsProxyUrl='/api/base-tiles/labels/{z}/{x}/{y}.png';
 const streetLayer=L.tileLayer(streetProxyUrl,tileOptions).addTo(map);
-const topoLayer=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{...tileOptions,maxZoom:17,attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap'});
-let streetTileErrors=0,topoTileErrors=0,streetSource='proxy',fallbackActivated=false;
+const topoLayer=L.tileLayer(topoProxyUrl,{...tileOptions,maxZoom:17,attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap'});
+const satelliteLayer=L.tileLayer(satelliteProxyUrl,{...tileOptions,maxZoom:19,attribution:'Ảnh vệ tinh &copy; Esri và các nhà cung cấp dữ liệu'});
+const labelsLayer=L.tileLayer(labelsProxyUrl,{...tileOptions,maxZoom:19,pane:'overlayPane',opacity:1,attribution:'Nhãn bản đồ &copy; Esri'});
+let streetTileErrors=0,topoTileErrors=0,satelliteTileErrors=0,streetSource='proxy',fallbackActivated=false;
 streetLayer.on('loading',()=>showMapLoading('Đang tải OpenStreetMap…'));
 streetLayer.on('tileload',()=>{streetTileErrors=0;hideMapLoading();});
 streetLayer.on('load',()=>{hideMapLoading();status('Bản đồ OpenStreetMap đã sẵn sàng.');});
@@ -29,9 +34,14 @@ streetLayer.on('tileerror',()=>{
   }
   if(!fallbackActivated){fallbackActivated=true;map.removeLayer(streetLayer);topoLayer.addTo(map);showMapLoading('Đang chuyển sang bản đồ địa hình…');status('OpenStreetMap tạm thời không phản hồi, đã chuyển sang địa hình dự phòng.');}
 });
+topoLayer.on('loading',()=>showMapLoading('Đang tải bản đồ địa hình…'));
 topoLayer.on('tileload',()=>{topoTileErrors=0;hideMapLoading();});
-topoLayer.on('load',()=>{hideMapLoading();status('Bản đồ địa hình đã sẵn sàng.');});
-topoLayer.on('tileerror',()=>{topoTileErrors++;if(topoTileErrors>=5){hideMapLoading();status('Không tải được bản đồ nền. Kiểm tra Internet rồi bấm Cập nhật.');}});
+topoLayer.on('load',()=>{hideMapLoading();status('Bản đồ địa hình và bình độ đã sẵn sàng.');});
+topoLayer.on('tileerror',()=>{topoTileErrors++;if(topoTileErrors>=5){hideMapLoading();status('Không tải được lớp địa hình. Hãy thử lớp Đường phố hoặc Vệ tinh.');}});
+satelliteLayer.on('loading',()=>showMapLoading('Đang tải ảnh vệ tinh…'));
+satelliteLayer.on('tileload',()=>{satelliteTileErrors=0;hideMapLoading();});
+satelliteLayer.on('load',()=>{hideMapLoading();status('Ảnh vệ tinh đã sẵn sàng.');});
+satelliteLayer.on('tileerror',()=>{satelliteTileErrors++;if(satelliteTileErrors>=5){hideMapLoading();status('Không tải được ảnh vệ tinh. Kiểm tra Internet rồi bấm Cập nhật.');}});
 setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-tile-loaded'))hideMapLoading();},900);
 
 const waypointLayer = L.layerGroup().addTo(map);
@@ -39,10 +49,16 @@ const trackLayer = L.layerGroup().addTo(map);
 const fireAlertLayer = L.layerGroup().addTo(map);
 const uploadedLayers = new Map();
 const layerControl = L.control.layers(
-  { 'Đường phố': streetLayer, 'Địa hình & bình độ': topoLayer },
-  { Waypoint: waypointLayer, Tracklog: trackLayer, 'Cảnh báo cháy rừng': fireAlertLayer },
+  { 'Đường phố': streetLayer, 'Địa hình & bình độ': topoLayer, 'Vệ tinh': satelliteLayer },
+  { 'Nhãn địa danh': labelsLayer, Waypoint: waypointLayer, Tracklog: trackLayer, 'Cảnh báo cháy rừng': fireAlertLayer },
   { collapsed: true, position: 'topleft' }
 ).addTo(map);
+map.on('baselayerchange',(event)=>{
+  // Ảnh vệ tinh khó đọc nếu thiếu địa danh; tự bật nhãn khi chọn vệ tinh.
+  if(event.layer===satelliteLayer && !map.hasLayer(labelsLayer)) labelsLayer.addTo(map);
+  if(event.layer!==satelliteLayer && map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer);
+  setTimeout(()=>map.invalidateSize(false),80);
+});
 
 // Bảng lớp thu gọn ở mép trái: chạm để mở danh sách có thanh cuộn.
 const layerControlEl = layerControl.getContainer();

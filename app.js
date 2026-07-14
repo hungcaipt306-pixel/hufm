@@ -220,25 +220,46 @@ app.use('/vendor/leaflet', express.static(path.join(__dirname, 'node_modules', '
 app.use('/vendor/vectorgrid', express.static(path.join(__dirname, 'node_modules', 'leaflet.vectorgrid', 'dist')));
 app.use((req, res, next) => { res.setHeader('Permissions-Policy', 'geolocation=(self), accelerometer=(self), gyroscope=(self), magnetometer=(self)'); next(); });
 
-// Same-origin OpenStreetMap tile proxy: avoids mobile/CDN/CSP failures while preserving OSM attribution.
-app.get('/api/base-tiles/osm/:z/:x/:y.png', async (req, res) => {
+// Same-origin map tile proxies: avoid CSP/CDN failures on mobile Safari and installed PWA.
+function validTileCoordinates(req, maxZoom = 19) {
   const z=Number(req.params.z), x=Number(req.params.x), y=Number(req.params.y);
   const max=Math.pow(2,z);
-  if(!Number.isInteger(z)||!Number.isInteger(x)||!Number.isInteger(y)||z<0||z>19||x<0||y<0||x>=max||y>=max) return res.status(400).end();
-  const sub=['a','b','c'][(x+y)%3];
-  const upstream=`https://${sub}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+  if(!Number.isInteger(z)||!Number.isInteger(x)||!Number.isInteger(y)||z<0||z>maxZoom||x<0||y<0||x>=max||y>=max) return null;
+  return {z,x,y};
+}
+async function proxyMapTile(res, upstream, source, fallbackType='image/png') {
   try {
-    const response=await fetch(upstream,{headers:{'User-Agent':'HUFM-Hue-Forest-Manager/1.2 (forest-management-webapp)','Accept':'image/avif,image/webp,image/png,image/*,*/*;q=0.8'},signal:AbortSignal.timeout(12000)});
+    const response=await fetch(upstream,{headers:{'User-Agent':'HUFM-Hue-Forest-Manager/1.3 (forest-management-webapp)','Accept':'image/avif,image/webp,image/jpeg,image/png,image/*,*/*;q=0.8'},signal:AbortSignal.timeout(15000)});
     if(!response.ok) return res.status(response.status).end();
     const body=Buffer.from(await response.arrayBuffer());
-    res.setHeader('Content-Type',response.headers.get('content-type')||'image/png');
+    res.setHeader('Content-Type',response.headers.get('content-type')||fallbackType);
     res.setHeader('Cache-Control','public, max-age=86400, stale-while-revalidate=604800');
-    res.setHeader('X-Map-Source','OpenStreetMap');
-    res.send(body);
+    res.setHeader('X-Map-Source',source);
+    return res.send(body);
   } catch(error) {
-    console.error('OSM tile proxy error:',error.message);
-    res.status(502).end();
+    console.error(`${source} tile proxy error:`,error.message);
+    return res.status(502).end();
   }
+}
+app.get('/api/base-tiles/osm/:z/:x/:y.png', async (req, res) => {
+  const tile=validTileCoordinates(req,19); if(!tile) return res.status(400).end();
+  const {z,x,y}=tile, sub=['a','b','c'][(x+y)%3];
+  return proxyMapTile(res,`https://${sub}.tile.openstreetmap.org/${z}/${x}/${y}.png`,'OpenStreetMap');
+});
+app.get('/api/base-tiles/topo/:z/:x/:y.png', async (req, res) => {
+  const tile=validTileCoordinates(req,17); if(!tile) return res.status(400).end();
+  const {z,x,y}=tile, sub=['a','b','c'][(x+y)%3];
+  return proxyMapTile(res,`https://${sub}.tile.opentopomap.org/${z}/${x}/${y}.png`,'OpenTopoMap');
+});
+app.get('/api/base-tiles/satellite/:z/:x/:y.jpg', async (req, res) => {
+  const tile=validTileCoordinates(req,19); if(!tile) return res.status(400).end();
+  const {z,x,y}=tile;
+  return proxyMapTile(res,`https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`,'Esri World Imagery','image/jpeg');
+});
+app.get('/api/base-tiles/labels/:z/:x/:y.png', async (req, res) => {
+  const tile=validTileCoordinates(req,19); if(!tile) return res.status(400).end();
+  const {z,x,y}=tile;
+  return proxyMapTile(res,`https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/${z}/${y}/${x}`,'Esri Reference Labels');
 });
 
 const SequelizeStore = SequelizeStoreFactory(session.Store);

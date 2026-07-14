@@ -160,3 +160,14 @@ Admin có thể tạo trực tiếp tài khoản user/mod tại **Tài khoản**
 - OpenStreetMap được tải qua proxy cùng tên miền `/api/base-tiles/osm/...`, có chuyển sang nguồn OSM trực tiếp và OpenTopoMap khi nguồn trước không phản hồi.
 - Tên đơn vị biển đảo được chuẩn hóa theo dữ liệu hành chính mới: **Đặc khu Hoàng Sa** và **Đặc khu Trường Sa**.
 - Sau khi xóa lớp bản đồ, giao diện hiển thị thông báo thành công và tự động tải lại danh sách lớp.
+
+## Lớp nền bản đồ (cập nhật)
+
+HUFM có bốn lựa chọn hiển thị liên quan đến bản đồ nền:
+
+- **Đường phố**: OpenStreetMap.
+- **Địa hình & bình độ**: OpenTopoMap, được tải qua proxy cùng tên miền HUFM để ổn định hơn trên Safari/PWA.
+- **Vệ tinh**: Esri World Imagery.
+- **Nhãn địa danh**: lớp nhãn ranh giới/địa danh Esri; ứng dụng tự bật khi chọn Vệ tinh và có thể bật/tắt riêng trong bảng lớp.
+
+Các tile nền được máy chủ HUFM chuyển tiếp và cache ngắn hạn. Việc sử dụng trong môi trường chính thức cần tuân thủ điều khoản và ghi nguồn của từng nhà cung cấp.
