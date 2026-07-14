@@ -152,21 +152,36 @@ let liveLine = null;
 let pendingMode = null;
 let appConfig = { offlineTileUrl:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', offlineTileMax:1200 };
 let cachedMapData = { waypoints:[], tracks:[] };
+const visibleDataRecords = new Map();
 const statusEl = document.getElementById('status');
 const modal = document.getElementById('modal');
 // Mở/đóng bảng Công cụ hoạt động giống nhau trong Safari và PWA cài trên màn hình chính.
 const mapToolsPanel = document.getElementById('mapTools');
 const panelToggleButtons = [document.getElementById('panelToggle'), document.getElementById('floatingPanelToggle')].filter(Boolean);
 const panelCloseButton = document.getElementById('panelClose');
+const toolsBackdrop = document.getElementById('toolsBackdrop');
 function setToolsPanel(open) {
   if (!mapToolsPanel) return;
   mapToolsPanel.classList.toggle('is-collapsed', !open);
+  toolsBackdrop?.classList.toggle('is-hidden', !open);
+  toolsBackdrop?.setAttribute('aria-hidden', String(!open));
   panelToggleButtons.forEach(button => button.setAttribute('aria-expanded', String(open)));
-  if (open) setTimeout(() => map.invalidateSize(false), 220);
+  document.body.classList.toggle('tools-panel-open', open && window.matchMedia('(max-width: 900px)').matches);
+  setTimeout(() => map?.invalidateSize(false), 300);
 }
 panelToggleButtons.forEach(button => button.addEventListener('click', () => setToolsPanel(mapToolsPanel?.classList.contains('is-collapsed'))));
 panelCloseButton?.addEventListener('click', () => setToolsPanel(false));
-if (window.matchMedia('(max-width: 700px)').matches) setToolsPanel(false);
+toolsBackdrop?.addEventListener('click', () => setToolsPanel(false));
+document.addEventListener('keydown', event => { if (event.key === 'Escape') setToolsPanel(false); });
+if (window.matchMedia('(max-width: 900px)').matches) setToolsPanel(false);
+else toolsBackdrop?.classList.add('is-hidden');
+window.addEventListener('resize', () => {
+  if (window.matchMedia('(min-width: 901px)').matches) {
+    toolsBackdrop?.classList.add('is-hidden');
+    document.body.classList.remove('tools-panel-open');
+  }
+  setTimeout(() => map?.invalidateSize(false), 120);
+});
 
 
 function status(text) { statusEl.textContent = text; }
@@ -199,23 +214,32 @@ async function loadData() {
   trackLayer.clearLayers();
   const list = document.getElementById('dataList');
   list.innerHTML = '';
+  visibleDataRecords.clear();
   const bounds = [];
   data.waypoints.forEach(w => {
+    visibleDataRecords.set(`waypoint:${w.id}`, w);
     L.marker([w.latitude, w.longitude])
       .bindPopup(`<b>${esc(w.name)}</b><br>${esc(w.category)}<br>${esc(w.description || '')}<br><small>${esc(w.User?.name || '')}</small>`)
       .addTo(waypointLayer);
     bounds.push([w.latitude, w.longitude]);
-    list.insertAdjacentHTML('beforeend', `<div class="data-item"><span class="wp-dot"></span><b>${esc(w.name)}</b><br><small>${w.latitude.toFixed(5)}, ${w.longitude.toFixed(5)}</small><br><button onclick="focusPoint(${w.latitude},${w.longitude})">Xem</button> ${w.offline ? '<span class="offline-badge">Chờ đồng bộ</span>' : `<button class="danger" onclick="deleteWaypoint(${w.id})">Xóa</button>`}</div>`);
+    const actions = w.offline
+      ? '<span class="offline-badge">Chờ đồng bộ</span>'
+      : `<button type="button" data-data-action="edit" data-data-type="waypoint" data-data-id="${esc(w.id)}">Chỉnh sửa</button><button type="button" class="danger" data-data-action="delete" data-data-type="waypoint" data-data-id="${esc(w.id)}">Xóa</button>`;
+    list.insertAdjacentHTML('beforeend', `<div class="data-item" data-record-key="waypoint:${esc(w.id)}"><div class="data-item-title"><span class="wp-dot"></span><b>${esc(w.name)}</b></div><small>${Number(w.latitude).toFixed(5)}, ${Number(w.longitude).toFixed(5)}</small><div class="data-actions"><button type="button" data-data-action="view" data-data-type="waypoint" data-data-id="${esc(w.id)}">Xem</button>${actions}</div></div>`);
   });
   data.tracks.forEach(t => {
-    const pts = t.points.map(p => [p.lat, p.lng]);
+    visibleDataRecords.set(`track:${t.id}`, t);
+    const pts = (t.points || []).map(p => [p.lat, p.lng]);
     if (pts.length) {
       L.polyline(pts, { weight: 4 })
-        .bindPopup(`<b>${esc(t.name)}</b><br>${Math.round(t.distanceMeters)} m<br><small>${esc(t.User?.name || '')}</small>`)
+        .bindPopup(`<b>${esc(t.name)}</b><br>${Math.round(t.distanceMeters || 0)} m<br><small>${esc(t.User?.name || '')}</small>`)
         .addTo(trackLayer);
       bounds.push(...pts);
     }
-    list.insertAdjacentHTML('beforeend', `<div class="data-item"><span class="track-dot"></span><b>${esc(t.name)}</b><br><small>${Math.round(t.distanceMeters)} m • ${t.points.length} điểm</small><div class="data-actions"><button onclick='focusTrack(${JSON.stringify(pts)})'>Xem</button>${t.offline ? '<span class="offline-badge">Chờ đồng bộ</span>' : `<a class="mini-link" href="/api/tracks/${t.id}/export/geojson">GeoJSON + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/gpx">GPX + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/kml">KML + WP</a><button class="danger" onclick="deleteTrack(${t.id})">Xóa</button>`}</div></div>`);
+    const actions = t.offline
+      ? '<span class="offline-badge">Chờ đồng bộ</span>'
+      : `<button type="button" data-data-action="edit" data-data-type="track" data-data-id="${esc(t.id)}">Chỉnh sửa</button><a class="mini-link" href="/api/tracks/${t.id}/export/geojson">GeoJSON + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/gpx">GPX + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/kml">KML + WP</a><button type="button" class="danger" data-data-action="delete" data-data-type="track" data-data-id="${esc(t.id)}">Xóa</button>`;
+    list.insertAdjacentHTML('beforeend', `<div class="data-item" data-record-key="track:${esc(t.id)}"><div class="data-item-title"><span class="track-dot"></span><b>${esc(t.name)}</b></div><small>${Math.round(t.distanceMeters || 0)} m • ${(t.points || []).length} điểm</small><div class="data-actions"><button type="button" data-data-action="view" data-data-type="track" data-data-id="${esc(t.id)}">Xem</button>${actions}</div></div>`);
   });
   if (!data.waypoints.length && !data.tracks.length) list.innerHTML = '<div class="layer-empty">Chưa có waypoint hoặc tracklog.</div>';
   if (bounds.length && !currentPosition) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
@@ -291,9 +315,120 @@ async function loadLayers() {
 }
 
 window.focusPoint = (a, b) => map.setView([a, b], 17);
-window.focusTrack = pts => map.fitBounds(pts, { padding: [30, 30] });
-window.deleteWaypoint = async id => { if (confirm('Xóa waypoint này?')) { await api(`/api/waypoints/${id}`, { method: 'DELETE' }); await loadData(); } };
-window.deleteTrack = async id => { if (confirm('Xóa tracklog này?')) { await api(`/api/tracks/${id}`, { method: 'DELETE' }); await loadData(); } };
+window.focusTrack = pts => { if (Array.isArray(pts) && pts.length) map.fitBounds(pts, { padding: [30, 30] }); };
+
+function openDataEdit(type, id) {
+  const item = visibleDataRecords.get(`${type}:${id}`);
+  if (!item) return showToast('Không tìm thấy dữ liệu để chỉnh sửa.');
+  const editModal = document.getElementById('dataEditModal');
+  document.getElementById('dataEditType').value = type;
+  document.getElementById('dataEditId').value = id;
+  document.getElementById('dataEditName').value = item.name || '';
+  document.getElementById('dataEditDescription').value = item.description || '';
+  const categoryWrap = document.getElementById('dataEditCategoryWrap');
+  categoryWrap.hidden = type !== 'waypoint';
+  if (type === 'waypoint') document.getElementById('dataEditCategory').value = item.category || 'Khác';
+  document.getElementById('dataEditTitle').textContent = type === 'waypoint' ? 'Chỉnh sửa waypoint' : 'Chỉnh sửa tracklog';
+  editModal.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  setTimeout(() => document.getElementById('dataEditName').focus(), 50);
+}
+function closeDataEdit() {
+  document.getElementById('dataEditModal')?.classList.add('hidden');
+  document.body.classList.remove('dialog-open');
+}
+document.getElementById('dataEditCancel')?.addEventListener('click', closeDataEdit);
+document.getElementById('dataEditModal')?.addEventListener('click', event => { if (event.target.id === 'dataEditModal') closeDataEdit(); });
+document.getElementById('dataEditSave')?.addEventListener('click', async () => {
+  const saveButton = document.getElementById('dataEditSave');
+  const type = document.getElementById('dataEditType').value;
+  const id = document.getElementById('dataEditId').value;
+  const name = document.getElementById('dataEditName').value.trim();
+  if (!name) return showToast('Vui lòng nhập tên dữ liệu.');
+  const payload = { name, description: document.getElementById('dataEditDescription').value.trim() };
+  if (type === 'waypoint') payload.category = document.getElementById('dataEditCategory').value;
+  saveButton.disabled = true;
+  saveButton.textContent = 'Đang lưu…';
+  try {
+    await api(type === 'waypoint' ? `/api/waypoints/${id}` : `/api/tracks/${id}`, { method:'PUT', body:JSON.stringify(payload), cache:'no-store' });
+    closeDataEdit();
+    await loadData();
+    status('Đã cập nhật dữ liệu thành công.');
+    showToast('✓ Đã cập nhật dữ liệu thành công');
+  } catch (error) {
+    showToast(error.message || 'Không thể cập nhật dữ liệu.');
+  } finally {
+    saveButton.disabled = false;
+    saveButton.textContent = 'Lưu thay đổi';
+  }
+});
+
+async function deleteDataRecord(type, id, itemName = '') {
+  const label = type === 'waypoint' ? 'waypoint' : 'tracklog';
+  const approved = await askDeleteRecord(`Xóa ${label}?`, itemName, `${label[0].toUpperCase()+label.slice(1)} sẽ bị xóa khỏi hệ thống và không thể khôi phục.`);
+  if (!approved) return;
+  try {
+    try {
+      await api(type === 'waypoint' ? `/api/waypoints/${id}` : `/api/tracks/${id}`, { method:'DELETE', cache:'no-store' });
+    } catch (firstError) {
+      await api(type === 'waypoint' ? `/api/waypoints/${id}/delete` : `/api/tracks/${id}/delete`, { method:'POST', body:JSON.stringify({}), cache:'no-store' });
+    }
+    await loadData();
+    status(`Đã xóa ${label} thành công.`);
+    showToast(`✓ Đã xóa ${label} thành công`);
+  } catch (error) {
+    showToast(error.message || `Không thể xóa ${label}.`);
+  }
+}
+
+function askDeleteRecord(title, name, message) {
+  const dialog = document.getElementById('confirmDeleteModal');
+  const titleEl = document.getElementById('confirmDeleteTitle');
+  const messageEl = document.getElementById('confirmDeleteMessage');
+  const nameEl = document.getElementById('confirmDeleteLayerName');
+  const accept = document.getElementById('confirmDeleteAccept');
+  const cancel = document.getElementById('confirmDeleteCancel');
+  if (!dialog || !accept || !cancel) return Promise.resolve(window.confirm(`${title}
+${name}`));
+  titleEl.textContent = title;
+  messageEl.textContent = message;
+  nameEl.textContent = name || '';
+  accept.textContent = 'Xóa';
+  dialog.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  return new Promise(resolve => {
+    const finish = value => {
+      dialog.classList.add('hidden');
+      document.body.classList.remove('dialog-open');
+      accept.removeEventListener('click', yes);
+      cancel.removeEventListener('click', no);
+      dialog.querySelector('[data-confirm-cancel]')?.removeEventListener('click', no);
+      resolve(value);
+    };
+    const yes = () => finish(true);
+    const no = () => finish(false);
+    accept.addEventListener('click', yes, { once:true });
+    cancel.addEventListener('click', no, { once:true });
+    dialog.querySelector('[data-confirm-cancel]')?.addEventListener('click', no, { once:true });
+  });
+}
+
+const dataListElement = document.getElementById('dataList');
+dataListElement?.addEventListener('click', async event => {
+  const button = event.target.closest('[data-data-action]');
+  if (!button || !dataListElement.contains(button)) return;
+  event.preventDefault();
+  const type = button.dataset.dataType;
+  const id = button.dataset.dataId;
+  const item = visibleDataRecords.get(`${type}:${id}`);
+  if (!item) return showToast('Dữ liệu không còn tồn tại hoặc chưa được tải lại.');
+  if (button.dataset.dataAction === 'view') {
+    if (type === 'waypoint') return window.focusPoint(Number(item.latitude), Number(item.longitude));
+    return window.focusTrack((item.points || []).map(p => [p.lat, p.lng]));
+  }
+  if (button.dataset.dataAction === 'edit') return openDataEdit(type, id);
+  if (button.dataset.dataAction === 'delete') return deleteDataRecord(type, id, item.name || '');
+});
 window.toggleLayer = id => {
   const item = uploadedLayers.get(id);
   if (!item) return;
@@ -333,9 +468,14 @@ layerListElement?.addEventListener('click', async event => {
 });
 function askDeleteLayer(layerName = '') {
   const modal = document.getElementById('confirmDeleteModal');
+  const titleBox = document.getElementById('confirmDeleteTitle');
+  const messageBox = document.getElementById('confirmDeleteMessage');
   const nameBox = document.getElementById('confirmDeleteLayerName');
   const accept = document.getElementById('confirmDeleteAccept');
   const cancel = document.getElementById('confirmDeleteCancel');
+  if (titleBox) titleBox.textContent = 'Xóa lớp bản đồ?';
+  if (messageBox) messageBox.textContent = 'Lớp bản đồ sẽ bị xóa khỏi hệ thống và không thể khôi phục.';
+  if (accept) accept.textContent = 'Xóa lớp';
   if (!modal || !accept || !cancel) return Promise.resolve(confirm('Bạn có chắc muốn xóa lớp bản đồ này? Thao tác không thể hoàn tác.'));
   nameBox.textContent = layerName ? `Lớp: ${layerName}` : '';
   modal.classList.remove('hidden');

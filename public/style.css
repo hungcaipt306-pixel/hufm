@@ -342,3 +342,110 @@
 body.dialog-open{overflow:hidden}
 @keyframes confirmPop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
 @media(max-width:480px){.confirm-dialog{align-items:end;padding:12px 12px calc(12px + env(safe-area-inset-bottom))}.confirm-dialog-box{width:100%;border-radius:22px;padding:24px 18px 18px}.confirm-dialog-actions button{min-height:50px}}
+
+
+/* Quản lý waypoint/tracklog: thao tác rõ ràng và ổn định trên mobile/PWA */
+.data-item-title{display:flex;align-items:center;gap:4px;margin-bottom:3px}
+.data-actions{display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:8px}
+.data-actions button,.data-actions .mini-link{min-height:36px;margin:0;padding:6px 10px;border-radius:9px}
+.data-actions .mini-link{display:inline-flex;align-items:center;justify-content:center;border:1px solid #bdcbc3;background:#fff;font-weight:650;font-size:.82rem}
+.data-edit-box{width:min(470px,100%)}
+@media(max-width:700px){.data-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.data-actions button,.data-actions .mini-link{width:100%;font-size:.82rem}.data-edit-box{padding-bottom:calc(20px + env(safe-area-inset-bottom))}}
+
+/* HUFM interface overhaul v25 — map-first, logical, non-overlapping controls */
+:root{
+  --surface:#ffffff;--surface-soft:#f4f8f5;--surface-muted:#eaf2ed;
+  --line:#d7e3dc;--line-strong:#bdcec4;--ink:#15362a;--ink-muted:#62776d;
+  --accent:#0d6b46;--accent-2:#178458;--danger-modern:#b93832;
+  --radius-lg:18px;--radius-md:13px;--shadow-soft:0 10px 32px rgba(13,64,43,.12);
+}
+body.ifmc-shell{background:#edf3ef;color:var(--ink)}
+.topbar{background:linear-gradient(118deg,#073f2d 0%,#07583b 68%,#0a6745 100%);box-shadow:0 2px 14px rgba(4,45,30,.2)}
+.topbar-inner{width:min(1440px,calc(100% - 28px));min-height:62px}
+.brand-logo{filter:drop-shadow(0 3px 5px rgba(0,0,0,.2))}
+.main-nav a,.link-btn{border-radius:10px;padding:9px 11px;transition:background .18s ease,transform .18s ease}
+.main-nav a:hover,.link-btn:hover{background:rgba(255,255,255,.12)}
+.container:not(.map-page .container){width:min(1180px,calc(100% - 28px))}
+.card,.auth-card,.table-card,.panel{border:1px solid var(--line);border-radius:var(--radius-lg);box-shadow:var(--shadow-soft);background:var(--surface)}
+input,select,textarea{border:1px solid var(--line-strong);border-radius:12px;background:#fff;color:var(--ink);transition:border-color .18s ease,box-shadow .18s ease}
+input:focus,select:focus,textarea:focus{outline:0;border-color:#2b8e64;box-shadow:0 0 0 4px rgba(28,128,83,.12)}
+button,.button{border-radius:11px;transition:transform .14s ease,box-shadow .18s ease,background .18s ease}
+button:active,.button:active{transform:translateY(1px) scale(.985)}
+button.primary,.button.primary{background:linear-gradient(135deg,#0d6845,#13865a);box-shadow:0 6px 16px rgba(14,104,69,.2)}
+
+.map-page .container{margin-top:62px;min-height:calc(100dvh - 62px)}
+.map-page .map-head{height:46px;padding:6px 14px;border-bottom:1px solid var(--line);box-shadow:none;z-index:10}
+.map-page .map-head h1{font-size:1rem;letter-spacing:-.01em}.map-page .map-head p{color:var(--ink-muted)}
+.map-page .map-layout{height:calc(100dvh - 108px);display:grid;grid-template-columns:minmax(300px,350px) minmax(0,1fr);background:#dce8e1;overflow:hidden}
+.map-page .map-stage{min-width:0;min-height:0;position:relative;border-left:1px solid var(--line)}
+.map-page #map{background:#dbe8e2}
+
+/* Desktop tools are in document flow, never over map zoom. */
+.map-page .ifmc-drawer{position:relative!important;inset:auto!important;width:auto!important;height:100%!important;max-height:none!important;transform:none!important;opacity:1!important;visibility:visible!important;border:0!important;border-radius:0!important;box-shadow:none!important;background:#f4f8f5;display:flex;flex-direction:column;z-index:20;overflow:hidden!important}
+.map-page .ifmc-drawer.is-collapsed{display:none!important}
+.map-page .drawer-title{position:relative;top:auto;flex:0 0 auto;padding:13px 15px;border-radius:0;background:linear-gradient(135deg,#0b5438,#0d7049);box-shadow:0 5px 15px rgba(9,77,51,.16)}
+.map-page .drawer-title b{font-size:.98rem}.map-page .drawer-title small{font-size:.67rem;opacity:.8}
+.map-page .drawer-title #panelClose{display:none}
+.map-page .drawer-scroll{min-height:0;flex:1;overflow-y:auto;overflow-x:hidden;padding:12px 11px 24px;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;scrollbar-gutter:stable;scrollbar-width:thin;scrollbar-color:#8daa9a transparent}
+.map-page .drawer-scroll::-webkit-scrollbar{width:6px}.map-page .drawer-scroll::-webkit-scrollbar-thumb{background:#8daa9a;border-radius:999px}
+.map-page .status{margin:0 0 9px;padding:10px 11px;font-size:.82rem;border-radius:12px}
+.map-page .network-bar{margin-bottom:11px;padding:9px 10px;border-radius:12px;font-size:.76rem}
+.map-page .data-panel{margin:0 0 9px!important;border:1px solid var(--line)!important;border-radius:14px!important;background:#fff!important;box-shadow:0 3px 12px rgba(19,66,45,.045)!important;overflow:clip!important}
+.map-page .data-panel summary{position:relative!important;top:auto!important;min-height:44px;padding:11px 12px!important;background:#f8fbf9!important;color:#194b37!important;font-size:.86rem!important;font-weight:780;cursor:pointer;user-select:none}
+.map-page .data-panel[open] summary{background:#eef6f1!important;border-bottom:1px solid var(--line)!important}
+.map-page .data-panel>*:not(summary){margin-left:11px!important;margin-right:11px!important}
+.map-page .data-panel small,.map-page .source-note{font-size:.72rem;color:var(--ink-muted)}
+.map-page .data-list{display:grid;gap:8px}
+.map-page .data-item,.map-page .layer-item{border:1px solid var(--line);border-radius:12px;background:#fff;padding:10px}
+
+/* Map controls: leave top-left exclusively for Leaflet zoom/layers. */
+.floating-panel-toggle{display:none!important}
+.map-page .map-corner-actions{top:12px!important;right:12px!important;bottom:auto!important;display:flex!important;flex-direction:column;gap:8px!important}
+.map-page .map-corner-actions button{width:46px!important;min-width:46px!important;height:46px!important;min-height:46px!important;padding:0!important;border:1px solid rgba(13,85,57,.2)!important;border-radius:14px!important;background:rgba(255,255,255,.96)!important;box-shadow:0 7px 22px rgba(8,53,36,.18)!important;color:#0c5639!important;backdrop-filter:blur(10px)}
+.map-page .map-corner-actions button span{display:none!important}
+.map-primary-actions{bottom:14px!important;max-width:min(680px,calc(100% - 32px));border-radius:16px!important;padding:6px!important;background:rgba(5,63,42,.92)!important;box-shadow:0 12px 34px rgba(0,0,0,.25)!important}
+.map-primary-actions button{min-height:48px!important;border-radius:11px!important}
+.map-page .live-location-card{left:14px!important;right:auto!important;bottom:82px!important;border:1px solid rgba(255,255,255,.15);border-radius:13px!important;box-shadow:0 8px 22px rgba(0,0,0,.2)}
+.hufm-compact-layer-control.leaflet-control-layers{margin-top:8px!important}
+.tools-backdrop{display:none}
+
+/* Larger screens can collapse the sidebar from the page-head button. */
+@media(min-width:901px){
+  .map-page .map-layout:has(.ifmc-drawer.is-collapsed){grid-template-columns:0 minmax(0,1fr)}
+  .map-page .map-head-actions #panelToggle{display:inline-flex;align-items:center}
+}
+
+/* Tablet/mobile: full map + smooth bottom sheet. Tool toggle is bottom-right, far from zoom. */
+@media(max-width:900px){
+  .map-page .map-head{height:42px;padding:5px 10px}.map-page .map-head p{display:none}
+  .map-page .map-layout{height:calc(100dvh - 104px);display:block;position:relative}
+  .map-page .map-stage{height:100%;border-left:0}
+  .map-page .ifmc-drawer{display:flex!important;position:fixed!important;left:8px!important;right:8px!important;top:auto!important;bottom:max(8px,env(safe-area-inset-bottom))!important;width:auto!important;height:min(76dvh,680px)!important;max-height:none!important;border:1px solid rgba(13,72,49,.13)!important;border-radius:20px!important;box-shadow:0 22px 60px rgba(4,45,30,.32)!important;z-index:1500;transform:translateY(0)!important;opacity:1!important;visibility:visible!important;transition:transform .28s cubic-bezier(.2,.8,.2,1),opacity .2s ease!important;background:#f4f8f5}
+  .map-page .ifmc-drawer.is-collapsed{display:flex!important;transform:translateY(calc(100% + 30px))!important;opacity:0!important;visibility:hidden!important;pointer-events:none}
+  .map-page .drawer-title{border-radius:19px 19px 0 0;padding:12px 14px}
+  .map-page .drawer-title #panelClose{display:grid;place-items:center;width:40px;height:40px;border-radius:12px;background:rgba(255,255,255,.13)}
+  .map-page .drawer-scroll{padding:10px 10px calc(20px + env(safe-area-inset-bottom))}
+  .tools-backdrop{display:block;position:fixed;inset:0;background:rgba(2,27,18,.38);backdrop-filter:blur(2px);z-index:1490;opacity:1;visibility:visible;transition:opacity .2s ease,visibility .2s ease}
+  .map-tools.is-collapsed + .tools-backdrop,.tools-backdrop.is-hidden{opacity:0;visibility:hidden;pointer-events:none}
+  .floating-panel-toggle{display:flex!important;position:absolute!important;left:auto!important;right:12px!important;top:auto!important;bottom:78px!important;z-index:850!important;min-height:46px!important;padding:0 14px!important;border-radius:14px!important;background:rgba(255,255,255,.97)!important;color:#0c5b3c!important;border:1px solid rgba(13,85,57,.2)!important;box-shadow:0 8px 25px rgba(8,53,36,.2)!important;font-weight:800}
+  .floating-panel-toggle .tool-toggle-icon{font-size:1rem}
+  .map-page .map-head-actions #panelToggle{display:none!important}
+  .map-page .map-corner-actions{top:10px!important;right:10px!important}
+  .map-page .map-corner-actions button{width:43px!important;min-width:43px!important;height:43px!important;min-height:43px!important;border-radius:13px!important}
+  .map-page .live-location-card{left:10px!important;bottom:78px!important;max-width:calc(100% - 145px)!important}
+}
+
+@media(max-width:700px){
+  .map-page .container{margin-top:62px}.map-page .map-head{height:40px}.map-page .map-layout{height:calc(100dvh - 102px)}
+  .map-page .map-head h1{font-size:.88rem}.map-head-actions .compact-button{min-height:32px;font-size:.7rem;padding:4px 7px}
+  .map-primary-actions{left:7px!important;right:7px!important;bottom:max(7px,env(safe-area-inset-bottom))!important;max-width:none!important;transform:none!important;justify-content:stretch!important;gap:4px!important;padding:5px!important}
+  .map-primary-actions button{width:20%!important;min-width:0!important;min-height:52px!important;padding:5px 2px!important;flex-direction:column!important;gap:2px!important;font-size:1rem!important}
+  .map-primary-actions button span{font-size:.61rem!important;line-height:1.05}
+  .floating-panel-toggle{bottom:75px!important;right:9px!important;min-height:42px!important;padding:0 11px!important;font-size:.76rem}
+  .map-page .live-location-card{left:8px!important;bottom:75px!important;max-width:calc(100% - 120px)!important;padding:7px 9px!important}
+  .map-page .ifmc-drawer{left:6px!important;right:6px!important;bottom:max(6px,env(safe-area-inset-bottom))!important;height:min(79dvh,660px)!important;border-radius:18px!important}
+  .map-page .drawer-title{border-radius:17px 17px 0 0}
+  .leaflet-top.leaflet-left{top:4px!important;left:4px!important}
+}
+
+@media(prefers-reduced-motion:reduce){.map-page .ifmc-drawer,.tools-backdrop,*{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}

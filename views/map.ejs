@@ -1,7 +1,7 @@
 <%- include('partials/header',{title:'Bản đồ số',mapPage:true}) %>
 <div class="page-head map-head"><div><h1>Bản đồ quản lý rừng</h1><p>Giám sát hiện trường • dữ liệu nhóm • làm việc offline</p></div><div class="map-head-actions"><button id="panelToggle" class="button compact-button" type="button">☰ Công cụ</button><a class="button compact-button" href="/api/export/geojson">⇩ GeoJSON</a></div></div>
 <div class="map-layout">
-  <aside class="map-tools ifmc-drawer" id="mapTools" aria-label="Bảng điều khiển bản đồ"><div class="drawer-title"><span><b>HUFM</b><small>Forest Management</small></span><button id="panelClose" type="button" aria-label="Đóng bảng công cụ">×</button></div>
+  <aside class="map-tools ifmc-drawer" id="mapTools" aria-label="Bảng điều khiển bản đồ"><div class="drawer-title"><span><b>Trung tâm công cụ</b><small>Dữ liệu • cảnh báo • offline • lớp bản đồ</small></span><button id="panelClose" type="button" aria-label="Đóng bảng công cụ">×</button></div>
     <div class="mobile-tool-handle" aria-hidden="true"></div>
     <div class="drawer-scroll" id="drawerScroll">
     <div id="status" class="status" role="status" aria-live="polite">Sẵn sàng.</div>
@@ -49,9 +49,10 @@
     </details>
     </div>
   </aside>
+  <div id="toolsBackdrop" class="tools-backdrop" aria-hidden="true"></div>
   <div class="map-stage">
     <div id="map" aria-label="Bản đồ quản lý rừng"></div>
-    <button id="floatingPanelToggle" class="floating-panel-toggle" type="button" aria-controls="mapTools" aria-expanded="false">☰ <span>Công cụ</span></button>
+    <button id="floatingPanelToggle" class="floating-panel-toggle" type="button" aria-controls="mapTools" aria-expanded="false"><span class="tool-toggle-icon">☰</span><span>Công cụ</span></button>
     <div class="map-primary-actions" aria-label="Công cụ hiện trường">
       <button id="locateBtn" class="primary active-tool" type="button" title="Định vị và bám theo vị trí">⌖ <span>Định vị</span></button>
       <button id="headingUpBtn" type="button" title="Xoay bản đồ theo hướng điện thoại" aria-pressed="false">➤ <span>Hướng lên</span></button>
@@ -83,6 +84,18 @@
       <button id="confirmDeleteCancel" type="button">Hủy</button>
       <button id="confirmDeleteAccept" type="button" class="danger solid-danger">Xóa lớp</button>
     </div>
+  </div>
+</div>
+
+<div id="dataEditModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="dataEditTitle">
+  <div class="modal-box data-edit-box">
+    <h3 id="dataEditTitle">Chỉnh sửa dữ liệu</h3>
+    <input id="dataEditType" type="hidden">
+    <input id="dataEditId" type="hidden">
+    <label>Tên<input id="dataEditName" maxlength="180" required></label>
+    <label>Mô tả<textarea id="dataEditDescription" maxlength="4000"></textarea></label>
+    <label id="dataEditCategoryWrap">Phân loại<select id="dataEditCategory"><option>Chốt bảo vệ rừng</option><option>Khu vực nguy cơ</option><option>Dấu vết vi phạm</option><option>Điểm tuần tra</option><option>Khác</option></select></label>
+    <div class="actions"><button id="dataEditCancel" type="button">Hủy</button><button id="dataEditSave" class="primary" type="button">Lưu thay đổi</button></div>
   </div>
 </div>
 <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-box"><h3 id="modalTitle">Lưu dữ liệu</h3><label>Tên<input id="itemName"></label><label>Mô tả<textarea id="itemDescription"></textarea></label><label id="categoryWrap">Phân loại<select id="itemCategory"><option>Chốt bảo vệ rừng</option><option>Khu vực nguy cơ</option><option>Dấu vết vi phạm</option><option>Điểm tuần tra</option><option>Khác</option></select></label><div class="actions"><button id="cancelModal">Hủy</button><button id="saveModal" class="primary">Lưu</button></div></div></div>

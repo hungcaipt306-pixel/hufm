@@ -839,7 +839,7 @@ app.delete('/api/waypoints/:id', requireAuth, async (req, res) => {
   if (!wp) return res.status(404).json({ error: 'Không tìm thấy.' });
   const u = req.session.user;
   if (!(u.role === 'admin' || (u.role === 'mod' && wp.groupId === u.groupId) || wp.userId === u.id)) return res.status(403).json({ error: 'Không có quyền.' });
-  await wp.destroy(); res.json({ ok: true });
+  await wp.destroy(); res.json({ ok: true, message: 'Đã xóa waypoint thành công.' });
 });
 
 app.post('/api/tracks', requireAuth, async (req, res) => {
@@ -850,12 +850,39 @@ app.post('/api/tracks', requireAuth, async (req, res) => {
   res.status(201).json(track);
 });
 
+app.put('/api/tracks/:id', requireAuth, async (req, res) => {
+  const track = await Tracklog.findByPk(req.params.id);
+  if (!track) return res.status(404).json({ error: 'Không tìm thấy tracklog.' });
+  const u = req.session.user;
+  if (!(u.role === 'admin' || (u.role === 'mod' && track.groupId === u.groupId) || track.userId === u.id)) return res.status(403).json({ error: 'Không có quyền chỉnh sửa.' });
+  const name = String(req.body.name || '').trim();
+  if (!name) return res.status(400).json({ error: 'Tên tracklog không được để trống.' });
+  await track.update({ name: name.slice(0, 180), description: String(req.body.description ?? '').slice(0, 4000) });
+  res.json({ ok: true, track });
+});
+
 app.delete('/api/tracks/:id', requireAuth, async (req, res) => {
   const track = await Tracklog.findByPk(req.params.id);
   if (!track) return res.status(404).json({ error: 'Không tìm thấy.' });
   const u = req.session.user;
   if (!(u.role === 'admin' || (u.role === 'mod' && track.groupId === u.groupId) || track.userId === u.id)) return res.status(403).json({ error: 'Không có quyền.' });
-  await track.destroy(); res.json({ ok: true });
+  await track.destroy(); res.json({ ok: true, message: 'Đã xóa tracklog thành công.' });
+});
+
+// Endpoint POST dự phòng cho Safari/PWA hoặc proxy chặn phương thức DELETE.
+app.post('/api/waypoints/:id/delete', requireAuth, async (req, res) => {
+  const wp = await Waypoint.findByPk(req.params.id);
+  if (!wp) return res.status(404).json({ error: 'Không tìm thấy waypoint.' });
+  const u = req.session.user;
+  if (!(u.role === 'admin' || (u.role === 'mod' && wp.groupId === u.groupId) || wp.userId === u.id)) return res.status(403).json({ error: 'Không có quyền xóa.' });
+  await wp.destroy(); res.json({ ok: true, message: 'Đã xóa waypoint thành công.' });
+});
+app.post('/api/tracks/:id/delete', requireAuth, async (req, res) => {
+  const track = await Tracklog.findByPk(req.params.id);
+  if (!track) return res.status(404).json({ error: 'Không tìm thấy tracklog.' });
+  const u = req.session.user;
+  if (!(u.role === 'admin' || (u.role === 'mod' && track.groupId === u.groupId) || track.userId === u.id)) return res.status(403).json({ error: 'Không có quyền xóa.' });
+  await track.destroy(); res.json({ ok: true, message: 'Đã xóa tracklog thành công.' });
 });
 
 
