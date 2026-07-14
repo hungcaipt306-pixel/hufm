@@ -318,16 +318,6 @@ app.get('/api/base-tiles/google-hybrid/:z/:x/:y.jpg', async (req, res) => {
     'image/jpeg'
   );
 });
-app.get('/api/base-tiles/google-satellite/:z/:x/:y.jpg', async (req, res) => {
-  const tile=validTileCoordinates(req,22); if(!tile) return res.status(400).end();
-  const {z,x,y}=tile, server=(x+y)%4;
-  return proxyMapTile(
-    res,
-    `https://mt${server}.google.com/vt/lyrs=s&x=${x}&y=${y}&z=${z}`,
-    'Google Satellite',
-    'image/jpeg'
-  );
-});
 const SequelizeStore = SequelizeStoreFactory(session.Store);
 const sessionStore = new SequelizeStore({ db: sequelize });
 app.use(session({
@@ -1067,19 +1057,6 @@ app.get('/api/layers/:id/data', requireAuth, async (req, res) => {
   if (!canAccessRecord(req.session.user, layer)) return res.status(403).json({ error: 'Không có quyền.' });
   if (layer.layerType === 'mbtiles') return res.status(400).json({ error: 'Lớp MBTiles được truy cập qua tile endpoint.' });
   res.json(deepRepairVietnamese(layer.vectorData));
-});
-
-app.get('/api/layers/:id/download', requireAuth, async (req, res) => {
-  const layer = await MapLayer.findByPk(req.params.id, { attributes: ['id','name','layerType','originalFilename','vectorData','fileData','userId','groupId'] });
-  if (!layer) return res.status(404).json({ error: 'Không tìm thấy lớp bản đồ.' });
-  if (!canAccessRecord(req.session.user, layer)) return res.status(403).json({ error: 'Không có quyền.' });
-  const baseName = safeFilename(layer.name || 'lop-ban-do');
-  if (layer.layerType === 'mbtiles') {
-    res.setHeader('Content-Disposition', `attachment; filename="${baseName}.mbtiles"`);
-    return res.type('application/octet-stream').send(Buffer.from(layer.fileData || []));
-  }
-  res.setHeader('Content-Disposition', `attachment; filename="${baseName}.geojson"`);
-  return res.type('application/geo+json').send(JSON.stringify(deepRepairVietnamese(layer.vectorData), null, 2));
 });
 
 app.get('/api/layers/:id/tiles/:z/:x/:y.:ext', requireAuth, async (req, res) => {
