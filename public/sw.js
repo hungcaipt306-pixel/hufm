@@ -1,5 +1,5 @@
-const SHELL='hue-shell-v6', TILES='hue-offline-tiles-v1';
-const ASSETS=['/','/map','/style.css','/map.js','/offline-db.js','/manifest.webmanifest','/favicon.png','/logo-kiem-lam-hue.png','https://unpkg.com/leaflet@1.9.4/dist/leaflet.css','https://unpkg.com/leaflet@1.9.4/dist/leaflet.js','https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js'];
+const SHELL='hue-shell-v7', TILES='hue-offline-tiles-v1';
+const ASSETS=['/','/map','/style.css','/map.js','/offline-db.js','/manifest.webmanifest','/favicon.png','/logo-kiem-lam-hue.png','/vendor/leaflet/leaflet.css','/vendor/leaflet/leaflet.js','/vendor/vectorgrid/Leaflet.VectorGrid.bundled.js'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(SHELL).then(c=>Promise.allSettled(ASSETS.map(a=>c.add(a))))));
 self.addEventListener('activate',e=>e.waitUntil((async()=>{for(const key of await caches.keys())if(key.startsWith('hue-shell-')&&key!==SHELL)await caches.delete(key);await self.clients.claim();})()));
 self.addEventListener('fetch',e=>{

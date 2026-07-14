@@ -1,4 +1,11 @@
-const map = L.map('map', { zoomControl:true }).setView([16.4637, 107.5909], 11);
+if (typeof window.L === 'undefined') {
+  const mapEl = document.getElementById('map');
+  if (mapEl) mapEl.innerHTML = '<div class="map-load-error"><b>Không tải được thư viện bản đồ.</b><br>Hãy bấm “Cập nhật app”, tải lại trang hoặc kiểm tra kết nối.</div>';
+  throw new Error('Leaflet chưa được tải');
+}
+const map = L.map('map', { zoomControl:true, preferCanvas:true }).setView([16.4637, 107.5909], 11);
+window.addEventListener('load', () => setTimeout(() => map.invalidateSize(true), 150));
+window.addEventListener('resize', () => map.invalidateSize(false));
 const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap contributors' }).addTo(map);
 const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom:17, attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap' });
 
@@ -234,8 +241,15 @@ function updateRealtimePosition(p) {
   status(isTracking ? `Đang ghi tracklog realtime: ${trackPoints.length} điểm • ±${Math.round(c.accuracy || 0)} m` : `Định vị realtime • ±${Math.round(c.accuracy || 0)} m`);
 }
 function locationError(e) {
-  status(`Không thể định vị: ${e.message}`);
+  const messages = {
+    1: 'Bạn chưa cấp quyền vị trí. Hãy bật Vị trí chính xác và cho phép HUFM truy cập vị trí.',
+    2: 'Thiết bị chưa xác định được vị trí. Hãy ra khu vực thoáng và bật GPS.',
+    3: 'GPS phản hồi quá chậm. Hãy thử lại hoặc tắt/bật dịch vụ vị trí.'
+  };
+  const message = messages[e.code] || e.message || 'Không thể xác định vị trí.';
+  status(message);
   const state = document.getElementById('liveLocationState'); if (state) state.textContent='Lỗi GPS';
+  const detail = document.getElementById('liveLocationDetail'); if (detail) detail.textContent=message;
 }
 async function enableOrientation() {
   if (orientationListening || !window.DeviceOrientationEvent) return;
@@ -409,3 +423,5 @@ document.getElementById('downloadOfflineBtn').onclick=async()=>{const box=docume
 document.getElementById('clearOfflineBtn').onclick=async()=>{if(!confirm('Xóa toàn bộ tile bản đồ đã tải offline?'))return;const reg=await navigator.serviceWorker.ready;reg.active.postMessage({type:'CLEAR_TILES'});};
 navigator.serviceWorker?.addEventListener('message',e=>{const d=e.data||{},box=document.getElementById('offlineStatus');if(d.type==='CACHE_PROGRESS')box.textContent=`Đã tải ${d.done}/${d.total} tile (${d.failed} lỗi)`;if(d.type==='CACHE_DONE')box.textContent=`Hoàn tất: ${d.done-d.failed}/${d.total} tile sẵn sàng offline.`;if(d.type==='TILES_CLEARED')box.textContent='Đã xóa bản đồ offline.';});
 (async()=>{try{appConfig=await api('/api/app-config');topoLayer.setUrl(appConfig.topoTileUrl);}catch(_){ }await updateNetworkUI();if(navigator.onLine)syncPending();})();
+
+setTimeout(() => map.invalidateSize(true), 350);

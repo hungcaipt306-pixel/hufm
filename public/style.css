@@ -104,3 +104,4 @@
  .ifmc-drawer{max-height:66dvh}
  .map-page .data-panel summary{top:51px}
 }
+.map-load-error{height:100%;min-height:320px;display:grid;place-content:center;text-align:center;padding:24px;background:#eef5f0;color:#8b1e16;font-size:1rem}
