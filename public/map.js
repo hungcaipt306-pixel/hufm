@@ -22,9 +22,13 @@ const topoDirectFallback=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{
   attribution:'Bản đồ địa hình &copy; OpenTopoMap; dữ liệu &copy; OpenStreetMap contributors'
 });
 let usingTopoFallback=false;
-const googleHybridLayer=L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{
-  ...commonTileOptions,maxZoom:22,subdomains:[],attribution:'Bản đồ &copy; Google'
+const googleHybridLayer=L.tileLayer('/api/base-tiles/google-hybrid/{z}/{x}/{y}.jpg',{
+  ...commonTileOptions,maxZoom:22,attribution:'Bản đồ &copy; Google'
 });
+const googleHybridDirect=L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{
+  ...commonTileOptions,maxZoom:22,attribution:'Bản đồ &copy; Google'
+});
+let usingGoogleDirect=false;
 streetLayer.addTo(map);
 let streetTileErrors=0,topoTileErrors=0,googleTileErrors=0;
 function attachTileStatus(layer,label,errorCounter){
@@ -44,9 +48,14 @@ function attachTileStatus(layer,label,errorCounter){
     }
     if(errorCounter==='google'){
       googleTileErrors++;
-      if(googleTileErrors===4 && map.hasLayer(googleHybridLayer)){
+      if(googleTileErrors>=4 && map.hasLayer(googleHybridLayer) && !usingGoogleDirect){
+        usingGoogleDirect=true;
+        map.removeLayer(googleHybridLayer);
+        googleHybridDirect.addTo(map);
+        status('Đang thử lại Google Satellite bằng kết nối trực tiếp…');
+      } else if(googleTileErrors>=8){
         hideMapLoading();
-        status('Google Satellite chưa tải được. Hãy kiểm tra kết nối hoặc bấm cập nhật lại.');
+        status('Google Satellite chưa tải được. Hãy kiểm tra kết nối và bấm cập nhật lại.');
       }
     }
   });
@@ -55,6 +64,7 @@ attachTileStatus(streetLayer,'bản đồ đường phố','street');
 attachTileStatus(topoLayer,'bản đồ địa hình','topo');
 attachTileStatus(topoDirectFallback,'bản đồ địa hình dự phòng','topoFallback');
 attachTileStatus(googleHybridLayer,'Google Satellite Hybrid','google');
+attachTileStatus(googleHybridDirect,'Google Satellite Hybrid trực tiếp','google');
 setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-tile-loaded'))hideMapLoading();},900);
 
 const waypointLayer = L.layerGroup().addTo(map);
@@ -77,6 +87,7 @@ const layerControl = L.control.layers(
 map.on('baselayerchange',event=>{
   if(event.layer===googleHybridLayer){
     googleTileErrors=0;
+    usingGoogleDirect=false;
   }
   if(event.layer===topoLayer){
     usingTopoFallback=false;
@@ -700,11 +711,12 @@ document.getElementById('updateAppBtn').onclick=async()=>{
   try{
     await Promise.allSettled([loadData(),loadLayers(),loadFireWeather(false),loadFireAlerts()]);
     streetTileErrors=0;topoTileErrors=0;googleTileErrors=0;
-    if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer)&&!map.hasLayer(googleHybridLayer))streetLayer.addTo(map);
+    if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer)&&!map.hasLayer(googleHybridLayer)&&!map.hasLayer(googleHybridDirect))streetLayer.addTo(map);
     if(map.hasLayer(streetLayer))streetLayer.redraw();
     if(map.hasLayer(topoLayer))topoLayer.redraw();
     if(map.hasLayer(topoDirectFallback))topoDirectFallback.redraw();
     if(map.hasLayer(googleHybridLayer))googleHybridLayer.redraw();
+    if(map.hasLayer(googleHybridDirect))googleHybridDirect.redraw();
     map.invalidateSize(true);
     if('serviceWorker' in navigator){
       const reg=await navigator.serviceWorker.getRegistration();

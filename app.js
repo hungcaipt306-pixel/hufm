@@ -262,7 +262,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
-      imgSrc: ["'self'", 'data:', 'blob:', 'https://*.tile.openstreetmap.org', 'https://*.tile.opentopomap.org'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://*.tile.openstreetmap.org', 'https://*.tile.opentopomap.org', 'https://mt0.google.com', 'https://mt1.google.com', 'https://mt2.google.com', 'https://mt3.google.com'],
       connectSrc: ["'self'", 'blob:'],
       fontSrc: ["'self'", 'data:']
     }
@@ -307,6 +307,16 @@ app.get('/api/base-tiles/topo/:z/:x/:y.png', async (req, res) => {
   const tile=validTileCoordinates(req,17); if(!tile) return res.status(400).end();
   const {z,x,y}=tile, sub=['a','b','c'][(x+y)%3];
   return proxyMapTile(res,`https://${sub}.tile.opentopomap.org/${z}/${x}/${y}.png`,'OpenTopoMap');
+});
+app.get('/api/base-tiles/google-hybrid/:z/:x/:y.jpg', async (req, res) => {
+  const tile=validTileCoordinates(req,22); if(!tile) return res.status(400).end();
+  const {z,x,y}=tile, server=(x+y)%4;
+  return proxyMapTile(
+    res,
+    `https://mt${server}.google.com/vt/lyrs=y&x=${x}&y=${y}&z=${z}`,
+    'Google Satellite Hybrid',
+    'image/jpeg'
+  );
 });
 const SequelizeStore = SequelizeStoreFactory(session.Store);
 const sessionStore = new SequelizeStore({ db: sequelize });

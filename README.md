@@ -256,3 +256,9 @@ Vùng nguy cơ cháy là lớp minh họa theo dữ liệu khí tượng Open-Me
 - Đã xóa lớp nhãn OpenStreetMap/CARTO phủ riêng.
 - Tùy chọn vệ tinh duy nhất là **Google Satellite + nhãn Google**.
 - OpenStreetMap và OpenTopoMap vẫn được giữ làm các lớp đường phố và địa hình riêng.
+
+
+## v31 - Sửa Google Satellite trên Safari/PWA
+- Google Hybrid được tải qua endpoint cùng tên miền `/api/base-tiles/google-hybrid/...` để không bị CSP chặn.
+- Nếu proxy tạm lỗi, ứng dụng thử lại trực tiếp từ Google; không sử dụng nguồn vệ tinh khác.
+- Cache PWA: `hue-shell-v31-google-satellite-proxy`.
