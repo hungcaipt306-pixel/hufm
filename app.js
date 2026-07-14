@@ -283,7 +283,7 @@ function haversine(a, b) {
 }
 
 app.get('/health', (req, res) => res.json({ ok: true }));
-app.get('/', (req, res) => res.redirect(req.session.user ? '/dashboard' : '/login'));
+app.get('/', (req, res) => res.redirect(req.session.user ? '/map' : '/login'));
 
 app.get('/register', (req, res) => res.render('register'));
 app.post('/register', async (req, res) => {
@@ -312,7 +312,7 @@ app.post('/login', async (req, res) => {
     flash(req, 'error', user.status === 'pending' ? 'Tài khoản đang chờ phê duyệt.' : 'Tài khoản đã bị từ chối.'); return res.redirect('/login');
   }
   req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role, groupId: user.groupId, groupName: user.Group?.name || null };
-  res.redirect('/dashboard');
+  res.redirect('/map');
 });
 app.post('/logout', (req, res) => req.session.destroy(() => res.redirect('/login')));
 

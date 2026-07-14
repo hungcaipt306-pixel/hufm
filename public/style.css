@@ -68,3 +68,39 @@
 
 @media(max-width:900px){.header-summary{display:none}.ifmc-shell .main-nav{top:calc(66px + env(safe-area-inset-top));background:rgba(8,61,42,.985)}.map-page .container{margin-top:66px}.ifmc-drawer{width:min(360px,calc(100vw - 28px))}}
 @media(max-width:700px){.map-page .map-head{height:54px;padding:8px 10px}.map-page .map-head p{display:none}.map-page .map-layout{height:calc(100dvh - 120px)}.map-head-actions .compact-button{min-height:36px;padding:6px 9px}.ifmc-drawer{position:fixed;left:0;right:0;top:auto;bottom:0;width:100%;max-height:78dvh;border-radius:18px 18px 0 0;padding-bottom:max(14px,env(safe-area-inset-bottom));transform:translateY(0)}.ifmc-drawer.is-collapsed{transform:translateY(calc(100% + 20px));opacity:0}.drawer-title{border-radius:18px 18px 0 0}.map-page .map-layout{display:block}.map-page .map-tools{height:auto;overflow:auto}.map-page .mobile-tool-handle{display:none}.map-page .live-location-card{right:10px;bottom:120px;max-width:calc(100% - 20px)}.map-page .map-corner-actions{bottom:12px}.map-page footer{display:none}.ifmc-shell .auth-card:before{margin:-18px -18px 18px}.guest-nav{gap:4px}.guest-nav a{padding:7px 9px;font-size:.82rem}}
+
+
+/* HUFM map-first field interface v2 */
+.map-page{overflow:hidden}
+.map-page .map-head{height:44px;padding:5px 12px}
+.map-page .map-head h1{font-size:.96rem}
+.map-page .map-head p{font-size:.68rem}
+.map-page .map-layout{height:calc(100dvh - 110px)}
+.map-page .ifmc-drawer{overflow-y:auto;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:#8ca99a transparent}
+.map-page .ifmc-drawer::-webkit-scrollbar{width:6px}.map-page .ifmc-drawer::-webkit-scrollbar-thumb{background:#8ca99a;border-radius:999px}
+.map-page .data-panel summary{position:sticky;top:54px;z-index:1}
+.map-primary-actions{position:absolute;z-index:820;left:50%;bottom:14px;transform:translateX(-50%);display:flex;gap:7px;padding:7px;background:rgba(8,61,42,.92);border:1px solid rgba(255,255,255,.2);border-radius:14px;box-shadow:0 8px 26px rgba(0,0,0,.28);backdrop-filter:blur(8px)}
+.map-primary-actions button{min-height:44px;padding:7px 11px;border:0;border-radius:9px;background:rgba(255,255,255,.13);color:#fff;display:flex;gap:6px;align-items:center;font-size:.78rem;white-space:nowrap}
+.map-primary-actions button.primary,.map-primary-actions button.is-active{background:#fff;color:#0d4b34}
+.map-primary-actions button:disabled{opacity:.45}
+.map-page .map-corner-actions{right:12px;top:12px;bottom:auto;display:grid;gap:7px}
+.map-page .map-corner-actions button{min-width:118px;min-height:40px;background:rgba(255,255,255,.95)}
+.map-page .live-location-card{right:12px;bottom:80px;max-width:260px}
+.map-bearing-on .leaflet-map-pane{transform-origin:50% 50%;rotate:var(--map-bearing,0deg)}
+.map-bearing-on .leaflet-marker-icon,.map-bearing-on .leaflet-marker-shadow,.map-bearing-on .leaflet-popup,.map-bearing-on .leaflet-tooltip{rotate:var(--map-counter-bearing,0deg)}
+.map-bearing-on .leaflet-control-attribution:before{content:'Hướng lên • ';font-weight:700;color:#0d4b34}
+.page-head,.panel,.auth-card,.table-wrap{max-height:calc(100dvh - 110px)}
+.panel,.table-wrap{overflow:auto;overscroll-behavior:contain;scrollbar-width:thin}
+@media(max-width:700px){
+ .map-page .map-head{height:40px}.map-page .map-layout{height:calc(100dvh - 106px)}
+ .map-page .map-head h1{font-size:.88rem}.map-head-actions .compact-button{min-height:31px;padding:4px 8px;font-size:.72rem}
+ .map-primary-actions{left:8px;right:8px;bottom:max(8px,env(safe-area-inset-bottom));transform:none;justify-content:space-between;gap:4px;padding:5px;border-radius:12px}
+ .map-primary-actions button{width:20%;min-width:0;min-height:48px;padding:5px 2px;flex-direction:column;gap:1px;font-size:1rem}
+ .map-primary-actions button span{font-size:.58rem;line-height:1}
+ .map-page .map-corner-actions{right:8px;top:8px;display:flex;gap:5px}
+ .map-page .map-corner-actions button{min-width:43px;width:43px;height:43px;padding:0;border-radius:50%;font-size:1rem}
+ .map-page .map-corner-actions button span{display:none}
+ .map-page .live-location-card{left:8px;right:auto;bottom:72px;max-width:calc(100% - 16px)}
+ .ifmc-drawer{max-height:66dvh}
+ .map-page .data-panel summary{top:51px}
+}

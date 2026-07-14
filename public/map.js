@@ -1,4 +1,4 @@
-const map = L.map('map').setView([16.4637, 107.5909], 11);
+const map = L.map('map', { zoomControl:true }).setView([16.4637, 107.5909], 11);
 const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap contributors' }).addTo(map);
 const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom:17, attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap' });
 
@@ -16,6 +16,8 @@ let isTracking = false;
 let currentHeading = 0;
 let lastGpsHeading = null;
 let orientationListening = false;
+let headingUpEnabled = false;
+let mapBearing = 0;
 let trackPoints = [];
 let liveLine = null;
 let pendingMode = null;
@@ -188,8 +190,20 @@ function markerIcon(heading = 0) {
     iconSize: [42, 42], iconAnchor: [21, 21], popupAnchor: [0, -21]
   });
 }
+function applyMapBearing() {
+  const mapEl = document.getElementById('map');
+  if (!mapEl) return;
+  const bearing = headingUpEnabled && Number.isFinite(currentHeading) ? -currentHeading : 0;
+  mapBearing = bearing;
+  mapEl.classList.toggle('map-bearing-on', headingUpEnabled);
+  mapEl.style.setProperty('--map-bearing', `${bearing}deg`);
+  mapEl.style.setProperty('--map-bearing-number', String(bearing));
+  mapEl.style.setProperty('--map-counter-bearing', `${-bearing}deg`);
+}
 function redrawHeading() {
-  if (currentMarker) currentMarker.setIcon(markerIcon(currentHeading));
+  const relativeHeading = headingUpEnabled ? 0 : currentHeading;
+  if (currentMarker) currentMarker.setIcon(markerIcon(relativeHeading));
+  applyMapBearing();
   if (currentPosition) updateLiveLocationCard(currentPosition);
 }
 function updateRealtimePosition(p) {
@@ -200,10 +214,10 @@ function updateRealtimePosition(p) {
   }
   const latlng = [c.latitude, c.longitude];
   if (!currentMarker) {
-    currentMarker = L.marker(latlng, { icon:markerIcon(currentHeading), zIndexOffset:1000 })
+    currentMarker = L.marker(latlng, { icon:markerIcon(headingUpEnabled ? 0 : currentHeading), zIndexOffset:1000 })
       .bindPopup('Vị trí realtime').addTo(map);
   } else {
-    currentMarker.setLatLng(latlng).setIcon(markerIcon(currentHeading));
+    currentMarker.setLatLng(latlng).setIcon(markerIcon(headingUpEnabled ? 0 : currentHeading));
   }
   if (!accuracyCircle) accuracyCircle = L.circle(latlng, { radius:c.accuracy || 0, weight:1, opacity:.65, fillOpacity:.08, className:'location-accuracy' }).addTo(map);
   else accuracyCircle.setLatLng(latlng).setRadius(c.accuracy || 0);
@@ -215,6 +229,7 @@ function updateRealtimePosition(p) {
     const moved = !previous || map.distance([previous.lat, previous.lng], latlng) >= 1.5 || (Date.now() - new Date(previous.time).getTime()) >= 5000;
     if (moved) { trackPoints.push(point); liveLine?.addLatLng(latlng); }
   }
+  applyMapBearing();
   updateLiveLocationCard(currentPosition);
   status(isTracking ? `Đang ghi tracklog realtime: ${trackPoints.length} điểm • ±${Math.round(c.accuracy || 0)} m` : `Định vị realtime • ±${Math.round(c.accuracy || 0)} m`);
 }
@@ -249,10 +264,26 @@ async function startLiveLocation({center=true}={}) {
   } else if (currentPosition && center) map.setView([currentPosition.latitude,currentPosition.longitude], Math.max(map.getZoom(),17));
 }
 function locate() {
+  isFollowingLocation = !isFollowingLocation || locationWatchId === null;
   startLiveLocation({center:true});
   if (currentPosition) map.setView([currentPosition.latitude,currentPosition.longitude],17);
+  const btn=document.getElementById('locateBtn');
+  btn?.classList.toggle('is-active',isFollowingLocation);
+  btn?.setAttribute('aria-pressed',String(isFollowingLocation));
+  status(isFollowingLocation?'Đang bám theo vị trí realtime.':'GPS vẫn hoạt động; đã tắt bám theo bản đồ.');
 }
 document.getElementById('locateBtn').onclick = locate;
+document.getElementById('headingUpBtn').onclick = async () => {
+  await enableOrientation();
+  headingUpEnabled=!headingUpEnabled;
+  const btn=document.getElementById('headingUpBtn');
+  btn.classList.toggle('is-active',headingUpEnabled);
+  btn.setAttribute('aria-pressed',String(headingUpEnabled));
+  btn.querySelector('span').textContent=headingUpEnabled?'Đang xoay':'Hướng lên';
+  redrawHeading();
+  status(headingUpEnabled?'Bản đồ đang xoay theo hướng điện thoại.':'Đã khóa bản đồ về hướng Bắc.');
+};
+map.on('dragstart',()=>{if(isFollowingLocation){isFollowingLocation=false;document.getElementById('locateBtn')?.classList.remove('is-active');}});
 document.getElementById('addWpBtn').onclick = () => {
   if (!currentPosition) { startLiveLocation(); status('Đang lấy vị trí realtime, hãy bấm Waypoint lại sau khi có tọa độ.'); return; }
   pendingMode='waypoint'; document.getElementById('modalTitle').textContent='Lưu waypoint'; document.getElementById('categoryWrap').style.display='grid'; modal.classList.remove('hidden');
@@ -282,6 +313,22 @@ document.getElementById('saveModal').onclick=async()=>{
 
 document.getElementById('reloadDataBtn').onclick=async()=>{status('Đang tải lại waypoint và tracklog...');try{await loadData();status('Đã cập nhật dữ liệu bản đồ.');}catch(e){status(e.message);}};
 document.getElementById('reloadLayersBtn').onclick=async()=>{status('Đang tải lại các lớp bản đồ...');try{await loadLayers();status('Đã cập nhật lớp bản đồ.');document.querySelector('.layer-panel')?.setAttribute('open','');}catch(e){status(e.message);}};
+document.getElementById('updateAppBtn').onclick=async()=>{
+  const btn=document.getElementById('updateAppBtn');
+  btn.disabled=true; status('Đang kiểm tra phiên bản HUFM mới...');
+  try{
+    if('serviceWorker' in navigator){
+      const reg=await navigator.serviceWorker.getRegistration();
+      await reg?.update();
+      if(reg?.waiting) reg.waiting.postMessage({type:'SKIP_WAITING'});
+      else reg?.active?.postMessage({type:'CLEAR_APP_CACHE'});
+      await new Promise(r=>setTimeout(r,700));
+    }
+    status('Đã cập nhật tài nguyên ứng dụng. Đang tải lại...');
+    location.reload();
+  }catch(e){status(`Không thể cập nhật: ${e.message}`);btn.disabled=false;}
+};
+if('serviceWorker' in navigator){navigator.serviceWorker.addEventListener('controllerchange',()=>location.reload());}
 
 document.getElementById('layerUploadForm').addEventListener('submit', async event => {
   event.preventDefault();

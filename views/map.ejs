@@ -3,12 +3,6 @@
 <div class="map-layout">
   <aside class="map-tools ifmc-drawer" id="mapTools" aria-label="Bảng điều khiển bản đồ"><div class="drawer-title"><span><b>HUFM</b><small>Forest Management</small></span><button id="panelClose" type="button" aria-label="Đóng bảng công cụ">×</button></div>
     <div class="mobile-tool-handle" aria-hidden="true"></div>
-    <div class="map-actions-grid">
-      <button id="locateBtn" class="primary">📍 Định vị</button>
-      <button id="addWpBtn">➕ Waypoint</button>
-      <button id="startTrackBtn">▶ Ghi tracklog</button>
-      <button id="stopTrackBtn" disabled>⏹ Dừng và lưu</button>
-    </div>
     <div id="status" class="status" role="status" aria-live="polite">Sẵn sàng.</div>
     <div class="network-bar"><span id="networkDot"></span><b id="networkText">Đang kiểm tra mạng</b><span id="pendingCount">0 bản ghi chờ</span></div>
     <details class="data-panel offline-panel" open>
@@ -45,9 +39,17 @@
   </aside>
   <div class="map-stage">
     <div id="map" aria-label="Bản đồ quản lý rừng"></div>
-    <div class="map-corner-actions" aria-label="Công cụ tải dữ liệu và lớp bản đồ">
+    <div class="map-primary-actions" aria-label="Công cụ hiện trường">
+      <button id="locateBtn" class="primary active-tool" type="button" title="Định vị và bám theo vị trí">⌖ <span>Định vị</span></button>
+      <button id="headingUpBtn" type="button" title="Xoay bản đồ theo hướng điện thoại" aria-pressed="false">➤ <span>Hướng lên</span></button>
+      <button id="addWpBtn" type="button" title="Lưu waypoint tại vị trí hiện tại">＋ <span>Waypoint</span></button>
+      <button id="startTrackBtn" type="button" title="Bắt đầu ghi tracklog">▶ <span>Ghi tuyến</span></button>
+      <button id="stopTrackBtn" type="button" title="Dừng và lưu tracklog" disabled>■ <span>Dừng</span></button>
+    </div>
+    <div class="map-corner-actions" aria-label="Tải và cập nhật">
       <button id="reloadDataBtn" type="button" title="Tải lại waypoint và tracklog">↻ <span>Dữ liệu</span></button>
       <button id="reloadLayersBtn" type="button" title="Tải lại các lớp bản đồ">▧ <span>Lớp bản đồ</span></button>
+      <button id="updateAppBtn" type="button" title="Kiểm tra và tải phiên bản ứng dụng mới">⟳ <span>Cập nhật app</span></button>
     </div>
     <div class="live-location-card" id="liveLocationCard" aria-live="polite">
       <b id="liveLocationState">GPS chưa bật</b>
