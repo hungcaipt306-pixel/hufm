@@ -1,0 +1,27 @@
+{
+  "id": "/map",
+  "name": "HUFM - Hue Forest Manager",
+  "short_name": "HUFM",
+  "description": "Ứng dụng quản lý rừng của Chi cục Kiểm lâm thành phố Huế",
+  "lang": "vi",
+  "start_url": "/map",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#eef4ef",
+  "theme_color": "#123d2a",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/logo-kiem-lam-hue.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

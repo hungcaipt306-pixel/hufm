@@ -1,20 +1,26 @@
 const map = L.map('map').setView([16.4637, 107.5909], 11);
-L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-  maxZoom: 19,
-  attribution: '&copy; OpenStreetMap contributors'
-}).addTo(map);
+const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom:19, attribution:'&copy; OpenStreetMap contributors' }).addTo(map);
+const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom:17, attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap' });
 
 const waypointLayer = L.layerGroup().addTo(map);
 const trackLayer = L.layerGroup().addTo(map);
 const fireAlertLayer = L.layerGroup().addTo(map);
 const uploadedLayers = new Map();
-const layerControl = L.control.layers(null, { Waypoint: waypointLayer, Tracklog: trackLayer, 'Cảnh báo cháy rừng': fireAlertLayer }, { collapsed: false }).addTo(map);
+const layerControl = L.control.layers({ 'Đường phố': streetLayer, 'Địa hình & bình độ': topoLayer }, { Waypoint: waypointLayer, Tracklog: trackLayer, 'Cảnh báo cháy rừng': fireAlertLayer }, { collapsed: false }).addTo(map);
 let currentPosition = null;
 let currentMarker = null;
-let watchId = null;
+let accuracyCircle = null;
+let locationWatchId = null;
+let isFollowingLocation = false;
+let isTracking = false;
+let currentHeading = 0;
+let lastGpsHeading = null;
+let orientationListening = false;
 let trackPoints = [];
 let liveLine = null;
 let pendingMode = null;
+let appConfig = { offlineTileUrl:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', offlineTileMax:1200 };
+let cachedMapData = { waypoints:[], tracks:[] };
 const statusEl = document.getElementById('status');
 const modal = document.getElementById('modal');
 
@@ -39,7 +45,11 @@ function randomVectorStyle() {
 }
 
 async function loadData() {
-  const data = await api('/api/map-data');
+  let data;
+  try { data = await api('/api/map-data'); cachedMapData=data; await OfflineDB.set('mapData',data); }
+  catch (e) { data = await OfflineDB.get('mapData') || {waypoints:[],tracks:[]}; if(!navigator.onLine) status('Đang dùng dữ liệu đã lưu trên thiết bị.'); else throw e; }
+  const pending = await getPending();
+  data = { waypoints:[...(data.waypoints||[]), ...pending.filter(x=>x.type==='waypoint').map(x=>({id:x.clientId, ...x.payload, offline:true, User:{name:'Chưa đồng bộ'}}))], tracks:[...(data.tracks||[]), ...pending.filter(x=>x.type==='track').map(x=>({id:x.clientId, ...x.payload, offline:true, distanceMeters:calcDistance(x.payload.points||[]), User:{name:'Chưa đồng bộ'}}))] };
   waypointLayer.clearLayers();
   trackLayer.clearLayers();
   const list = document.getElementById('dataList');
@@ -50,7 +60,7 @@ async function loadData() {
       .bindPopup(`<b>${esc(w.name)}</b><br>${esc(w.category)}<br>${esc(w.description || '')}<br><small>${esc(w.User?.name || '')}</small>`)
       .addTo(waypointLayer);
     bounds.push([w.latitude, w.longitude]);
-    list.insertAdjacentHTML('beforeend', `<div class="data-item"><span class="wp-dot"></span><b>${esc(w.name)}</b><br><small>${w.latitude.toFixed(5)}, ${w.longitude.toFixed(5)}</small><br><button onclick="focusPoint(${w.latitude},${w.longitude})">Xem</button> <button class="danger" onclick="deleteWaypoint(${w.id})">Xóa</button></div>`);
+    list.insertAdjacentHTML('beforeend', `<div class="data-item"><span class="wp-dot"></span><b>${esc(w.name)}</b><br><small>${w.latitude.toFixed(5)}, ${w.longitude.toFixed(5)}</small><br><button onclick="focusPoint(${w.latitude},${w.longitude})">Xem</button> ${w.offline ? '<span class="offline-badge">Chờ đồng bộ</span>' : `<button class="danger" onclick="deleteWaypoint(${w.id})">Xóa</button>`}</div>`);
   });
   data.tracks.forEach(t => {
     const pts = t.points.map(p => [p.lat, p.lng]);
@@ -60,7 +70,7 @@ async function loadData() {
         .addTo(trackLayer);
       bounds.push(...pts);
     }
-    list.insertAdjacentHTML('beforeend', `<div class="data-item"><span class="track-dot"></span><b>${esc(t.name)}</b><br><small>${Math.round(t.distanceMeters)} m • ${t.points.length} điểm</small><div class="data-actions"><button onclick='focusTrack(${JSON.stringify(pts)})'>Xem</button><a class="mini-link" href="/api/tracks/${t.id}/export/geojson">GeoJSON + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/gpx">GPX + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/kml">KML + WP</a><button class="danger" onclick="deleteTrack(${t.id})">Xóa</button></div></div>`);
+    list.insertAdjacentHTML('beforeend', `<div class="data-item"><span class="track-dot"></span><b>${esc(t.name)}</b><br><small>${Math.round(t.distanceMeters)} m • ${t.points.length} điểm</small><div class="data-actions"><button onclick='focusTrack(${JSON.stringify(pts)})'>Xem</button>${t.offline ? '<span class="offline-badge">Chờ đồng bộ</span>' : `<a class="mini-link" href="/api/tracks/${t.id}/export/geojson">GeoJSON + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/gpx">GPX + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/kml">KML + WP</a><button class="danger" onclick="deleteTrack(${t.id})">Xóa</button>`}</div></div>`);
   });
   if (!data.waypoints.length && !data.tracks.length) list.innerHTML = '<div class="layer-empty">Chưa có waypoint hoặc tracklog.</div>';
   if (bounds.length && !currentPosition) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
@@ -163,65 +173,115 @@ window.deleteLayer = async id => {
   status('Đã xóa lớp bản đồ.');
 };
 
-function locate() {
-  if (!navigator.geolocation) return status('Thiết bị không hỗ trợ định vị.');
-  status('Đang xác định vị trí...');
-  navigator.geolocation.getCurrentPosition(p => {
-    currentPosition = { latitude: p.coords.latitude, longitude: p.coords.longitude, accuracy: p.coords.accuracy };
-    if (currentMarker) currentMarker.remove();
-    currentMarker = L.circleMarker([currentPosition.latitude, currentPosition.longitude], { radius: 9, weight: 3, fillOpacity: 0.7 })
-      .bindPopup(`Vị trí hiện tại<br>Độ chính xác ±${Math.round(currentPosition.accuracy)} m`).addTo(map).openPopup();
-    map.setView([currentPosition.latitude, currentPosition.longitude], 17);
-    status(`Đã định vị • chính xác khoảng ${Math.round(currentPosition.accuracy)} m`);
-  }, e => status(`Không thể định vị: ${e.message}`), { enableHighAccuracy: true, timeout: 15000, maximumAge: 3000 });
+function updateLiveLocationCard(position) {
+  const state = document.getElementById('liveLocationState');
+  const detail = document.getElementById('liveLocationDetail');
+  if (!state || !detail) return;
+  const headingText = Number.isFinite(currentHeading) ? ` • hướng ${Math.round(currentHeading)}°` : '';
+  state.textContent = isTracking ? 'Đang ghi tracklog realtime' : 'Định vị realtime đang bật';
+  detail.textContent = `±${Math.round(position.accuracy || 0)} m${headingText} • ${new Date().toLocaleTimeString('vi-VN')}`;
 }
-
+function markerIcon(heading = 0) {
+  return L.divIcon({
+    className: 'live-location-icon',
+    html: `<div class="live-location-marker" style="transform:rotate(${heading}deg)"><span class="direction-arrow"></span></div>`,
+    iconSize: [42, 42], iconAnchor: [21, 21], popupAnchor: [0, -21]
+  });
+}
+function redrawHeading() {
+  if (currentMarker) currentMarker.setIcon(markerIcon(currentHeading));
+  if (currentPosition) updateLiveLocationCard(currentPosition);
+}
+function updateRealtimePosition(p) {
+  const c = p.coords;
+  currentPosition = { latitude:c.latitude, longitude:c.longitude, accuracy:c.accuracy, altitude:c.altitude, speed:c.speed, heading:c.heading, time:new Date(p.timestamp || Date.now()).toISOString() };
+  if (Number.isFinite(c.heading) && c.heading >= 0 && (c.speed == null || c.speed > .4)) {
+    lastGpsHeading = c.heading; currentHeading = c.heading;
+  }
+  const latlng = [c.latitude, c.longitude];
+  if (!currentMarker) {
+    currentMarker = L.marker(latlng, { icon:markerIcon(currentHeading), zIndexOffset:1000 })
+      .bindPopup('Vị trí realtime').addTo(map);
+  } else {
+    currentMarker.setLatLng(latlng).setIcon(markerIcon(currentHeading));
+  }
+  if (!accuracyCircle) accuracyCircle = L.circle(latlng, { radius:c.accuracy || 0, weight:1, opacity:.65, fillOpacity:.08, className:'location-accuracy' }).addTo(map);
+  else accuracyCircle.setLatLng(latlng).setRadius(c.accuracy || 0);
+  currentMarker.setPopupContent(`Vị trí hiện tại<br>Độ chính xác ±${Math.round(c.accuracy || 0)} m${Number.isFinite(currentHeading) ? `<br>Hướng ${Math.round(currentHeading)}°` : ''}`);
+  if (isFollowingLocation) map.panTo(latlng, { animate:true, duration:.35 });
+  if (isTracking) {
+    const previous = trackPoints[trackPoints.length - 1];
+    const point = { lat:c.latitude, lng:c.longitude, accuracy:c.accuracy, altitude:c.altitude, speed:c.speed, heading:currentHeading, time:currentPosition.time };
+    const moved = !previous || map.distance([previous.lat, previous.lng], latlng) >= 1.5 || (Date.now() - new Date(previous.time).getTime()) >= 5000;
+    if (moved) { trackPoints.push(point); liveLine?.addLatLng(latlng); }
+  }
+  updateLiveLocationCard(currentPosition);
+  status(isTracking ? `Đang ghi tracklog realtime: ${trackPoints.length} điểm • ±${Math.round(c.accuracy || 0)} m` : `Định vị realtime • ±${Math.round(c.accuracy || 0)} m`);
+}
+function locationError(e) {
+  status(`Không thể định vị: ${e.message}`);
+  const state = document.getElementById('liveLocationState'); if (state) state.textContent='Lỗi GPS';
+}
+async function enableOrientation() {
+  if (orientationListening || !window.DeviceOrientationEvent) return;
+  try {
+    if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+      const permission = await DeviceOrientationEvent.requestPermission();
+      if (permission !== 'granted') return;
+    }
+    window.addEventListener('deviceorientationabsolute', onOrientation, true);
+    window.addEventListener('deviceorientation', onOrientation, true);
+    orientationListening = true;
+  } catch (_) {}
+}
+function onOrientation(e) {
+  let heading = Number.isFinite(e.webkitCompassHeading) ? e.webkitCompassHeading : (Number.isFinite(e.alpha) ? (360 - e.alpha) % 360 : null);
+  if (!Number.isFinite(heading)) return;
+  if (lastGpsHeading == null || currentPosition?.speed == null || currentPosition.speed < .4) { currentHeading=heading; redrawHeading(); }
+}
+async function startLiveLocation({center=true}={}) {
+  if (!navigator.geolocation) return status('Thiết bị không hỗ trợ định vị.');
+  await enableOrientation();
+  isFollowingLocation = true;
+  if (locationWatchId === null) {
+    status('Đang bật định vị realtime...');
+    locationWatchId = navigator.geolocation.watchPosition(updateRealtimePosition, locationError, { enableHighAccuracy:true, maximumAge:500, timeout:20000 });
+  } else if (currentPosition && center) map.setView([currentPosition.latitude,currentPosition.longitude], Math.max(map.getZoom(),17));
+}
+function locate() {
+  startLiveLocation({center:true});
+  if (currentPosition) map.setView([currentPosition.latitude,currentPosition.longitude],17);
+}
 document.getElementById('locateBtn').onclick = locate;
 document.getElementById('addWpBtn').onclick = () => {
-  if (!currentPosition) { locate(); status('Hãy bấm lại sau khi định vị xong.'); return; }
-  pendingMode = 'waypoint';
-  document.getElementById('modalTitle').textContent = 'Lưu waypoint';
-  document.getElementById('categoryWrap').style.display = 'grid';
-  modal.classList.remove('hidden');
+  if (!currentPosition) { startLiveLocation(); status('Đang lấy vị trí realtime, hãy bấm Waypoint lại sau khi có tọa độ.'); return; }
+  pendingMode='waypoint'; document.getElementById('modalTitle').textContent='Lưu waypoint'; document.getElementById('categoryWrap').style.display='grid'; modal.classList.remove('hidden');
 };
-document.getElementById('startTrackBtn').onclick = () => {
+document.getElementById('startTrackBtn').onclick = async () => {
   if (!navigator.geolocation) return status('Thiết bị không hỗ trợ GPS.');
-  trackPoints = [];
-  if (liveLine) liveLine.remove();
-  liveLine = L.polyline([], { weight: 5 }).addTo(map);
-  watchId = navigator.geolocation.watchPosition(p => {
-    const point = { lat: p.coords.latitude, lng: p.coords.longitude, accuracy: p.coords.accuracy, time: new Date().toISOString() };
-    trackPoints.push(point); liveLine.addLatLng([point.lat, point.lng]); map.panTo([point.lat, point.lng]);
-    status(`Đang ghi tracklog: ${trackPoints.length} điểm`);
-  }, e => status(`Lỗi GPS: ${e.message}`), { enableHighAccuracy: true, maximumAge: 1000, timeout: 20000 });
-  document.getElementById('startTrackBtn').disabled = true;
-  document.getElementById('stopTrackBtn').disabled = false;
+  trackPoints=[]; if(liveLine)liveLine.remove(); liveLine=L.polyline([], {weight:5}).addTo(map);
+  isTracking=true; await startLiveLocation({center:true});
+  if(currentPosition) updateRealtimePosition({coords:{...currentPosition, latitude:currentPosition.latitude, longitude:currentPosition.longitude},timestamp:Date.now()});
+  document.getElementById('startTrackBtn').disabled=true; document.getElementById('stopTrackBtn').disabled=false;
 };
 document.getElementById('stopTrackBtn').onclick = () => {
-  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
-  watchId = null;
-  document.getElementById('startTrackBtn').disabled = false;
-  document.getElementById('stopTrackBtn').disabled = true;
-  if (trackPoints.length < 2) return status('Tracklog quá ngắn, chưa lưu.');
-  pendingMode = 'track';
-  document.getElementById('modalTitle').textContent = 'Lưu tracklog';
-  document.getElementById('categoryWrap').style.display = 'none';
-  modal.classList.remove('hidden');
+  isTracking=false;
+  document.getElementById('startTrackBtn').disabled=false; document.getElementById('stopTrackBtn').disabled=true;
+  updateLiveLocationCard(currentPosition || {accuracy:0});
+  if(trackPoints.length<2)return status('Tracklog quá ngắn, chưa lưu. Định vị realtime vẫn tiếp tục hoạt động.');
+  pendingMode='track'; document.getElementById('modalTitle').textContent='Lưu tracklog'; document.getElementById('categoryWrap').style.display='none'; modal.classList.remove('hidden');
 };
-document.getElementById('cancelModal').onclick = () => modal.classList.add('hidden');
-document.getElementById('saveModal').onclick = async () => {
-  const name = document.getElementById('itemName').value.trim() || undefined;
-  const description = document.getElementById('itemDescription').value.trim();
-  try {
-    if (pendingMode === 'waypoint') await api('/api/waypoints', { method: 'POST', body: JSON.stringify({ ...currentPosition, name, description, category: document.getElementById('itemCategory').value }) });
-    else await api('/api/tracks', { method: 'POST', body: JSON.stringify({ name, description, points: trackPoints }) });
-    modal.classList.add('hidden');
-    document.getElementById('itemName').value = '';
-    document.getElementById('itemDescription').value = '';
-    status('Đã lưu dữ liệu.');
-    await loadData();
-  } catch (e) { status(e.message); }
+document.getElementById('cancelModal').onclick=()=>modal.classList.add('hidden');
+document.getElementById('saveModal').onclick=async()=>{
+  const name=document.getElementById('itemName').value.trim()||undefined,description=document.getElementById('itemDescription').value.trim();
+  const type=pendingMode==='waypoint'?'waypoint':'track';
+  const payload=type==='waypoint'?{...currentPosition,name,description,category:document.getElementById('itemCategory').value}:{name,description,points:trackPoints};
+  try{if(navigator.onLine)await api(type==='waypoint'?'/api/waypoints':'/api/tracks',{method:'POST',body:JSON.stringify(payload)});else await queueRecord(type,payload);modal.classList.add('hidden');document.getElementById('itemName').value='';document.getElementById('itemDescription').value='';status(navigator.onLine?'Đã lưu dữ liệu.':'Đã lưu trên thiết bị, sẽ tự đồng bộ khi có mạng.');await updateNetworkUI();await loadData();}
+  catch(e){await queueRecord(type,payload);modal.classList.add('hidden');status('Mất kết nối: dữ liệu đã được lưu an toàn trên thiết bị.');await updateNetworkUI();await loadData();}
 };
+
+document.getElementById('reloadDataBtn').onclick=async()=>{status('Đang tải lại waypoint và tracklog...');try{await loadData();status('Đã cập nhật dữ liệu bản đồ.');}catch(e){status(e.message);}};
+document.getElementById('reloadLayersBtn').onclick=async()=>{status('Đang tải lại các lớp bản đồ...');try{await loadLayers();status('Đã cập nhật lớp bản đồ.');document.querySelector('.layer-panel')?.setAttribute('open','');}catch(e){status(e.message);}};
 
 document.getElementById('layerUploadForm').addEventListener('submit', async event => {
   event.preventDefault();
@@ -288,3 +348,17 @@ async function loadFireAlerts() {
 document.getElementById('refreshFireBtn').addEventListener('click', loadFireAlerts);
 document.getElementById('fireWard').addEventListener('change', loadFireAlerts);
 loadHueWards().then(loadFireAlerts);
+
+
+function calcDistance(points=[]){let d=0;const R=6371000,rad=x=>x*Math.PI/180;for(let i=1;i<points.length;i++){const a=points[i-1],b=points[i],dp=rad(b.lat-a.lat),dl=rad(b.lng-a.lng);const q=Math.sin(dp/2)**2+Math.cos(rad(a.lat))*Math.cos(rad(b.lat))*Math.sin(dl/2)**2;d+=2*R*Math.atan2(Math.sqrt(q),Math.sqrt(1-q));}return Math.round(d)}
+async function getPending(){return await OfflineDB.get('pendingRecords')||[]}
+async function queueRecord(type,payload){const rows=await getPending();rows.push({clientId:`${window.APP_USER.id}-${Date.now()}-${crypto.randomUUID?.()||Math.random().toString(36).slice(2)}`,type,payload,createdAt:new Date().toISOString()});await OfflineDB.set('pendingRecords',rows)}
+async function syncPending(){if(!navigator.onLine)return;const rows=await getPending();if(!rows.length){await updateNetworkUI();return;}status(`Đang đồng bộ ${rows.length} bản ghi...`);try{const out=await api('/api/sync',{method:'POST',body:JSON.stringify({records:rows})});const ok=new Set((out.results||[]).filter(x=>x.ok).map(x=>x.clientId));await OfflineDB.set('pendingRecords',rows.filter(x=>!ok.has(x.clientId)));status(`Đã đồng bộ ${ok.size}/${rows.length} bản ghi lên máy chủ.`);await loadData();}catch(e){status(`Chưa thể đồng bộ: ${e.message}`)}await updateNetworkUI()}
+async function updateNetworkUI(){const pending=(await getPending()).length;document.getElementById('networkText').textContent=navigator.onLine?'Có kết nối':'Đang offline';document.getElementById('networkDot').className=navigator.onLine?'online':'offline';document.getElementById('pendingCount').textContent=`${pending} bản ghi chờ`;}
+window.addEventListener('online',()=>{updateNetworkUI();syncPending()});window.addEventListener('offline',updateNetworkUI);document.getElementById('syncNowBtn').onclick=syncPending;
+function lon2tile(lon,z){return Math.floor((lon+180)/360*Math.pow(2,z))}function lat2tile(lat,z){return Math.floor((1-Math.asinh(Math.tan(lat*Math.PI/180))/Math.PI)/2*Math.pow(2,z))}
+function tileUrls(bounds,minZ,maxZ,template){const urls=[];for(let z=minZ;z<=maxZ;z++){const x1=lon2tile(bounds.getWest(),z),x2=lon2tile(bounds.getEast(),z),y1=lat2tile(bounds.getNorth(),z),y2=lat2tile(bounds.getSouth(),z);for(let x=x1;x<=x2;x++)for(let y=y1;y<=y2;y++){const sub=['a','b','c'][(x+y)%3];urls.push(template.replace('{s}',sub).replace('{z}',z).replace('{x}',x).replace('{y}',y));}}return urls}
+document.getElementById('downloadOfflineBtn').onclick=async()=>{const box=document.getElementById('offlineStatus');if(!('serviceWorker'in navigator)){box.textContent='Trình duyệt không hỗ trợ PWA offline.';return;}const [a,b]=document.getElementById('offlineZoom').value.split('-').map(Number);const urls=tileUrls(map.getBounds(),a,b,appConfig.offlineTileUrl);if(urls.length>appConfig.offlineTileMax){box.textContent=`Vùng quá lớn (${urls.length} tile). Hãy phóng to hoặc chọn mức zoom thấp hơn; giới hạn ${appConfig.offlineTileMax}.`;return;}box.textContent=`Đang tải ${urls.length} tile... Không đóng ứng dụng.`;const reg=await navigator.serviceWorker.ready;reg.active.postMessage({type:'CACHE_TILES',urls});};
+document.getElementById('clearOfflineBtn').onclick=async()=>{if(!confirm('Xóa toàn bộ tile bản đồ đã tải offline?'))return;const reg=await navigator.serviceWorker.ready;reg.active.postMessage({type:'CLEAR_TILES'});};
+navigator.serviceWorker?.addEventListener('message',e=>{const d=e.data||{},box=document.getElementById('offlineStatus');if(d.type==='CACHE_PROGRESS')box.textContent=`Đã tải ${d.done}/${d.total} tile (${d.failed} lỗi)`;if(d.type==='CACHE_DONE')box.textContent=`Hoàn tất: ${d.done-d.failed}/${d.total} tile sẵn sàng offline.`;if(d.type==='TILES_CLEARED')box.textContent='Đã xóa bản đồ offline.';});
+(async()=>{try{appConfig=await api('/api/app-config');topoLayer.setUrl(appConfig.topoTileUrl);}catch(_){ }await updateNetworkUI();if(navigator.onLine)syncPending();})();

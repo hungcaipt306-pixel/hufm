@@ -1,7 +1,7 @@
 <%- include('partials/header',{title:'Bản đồ số',mapPage:true}) %>
-<div class="page-head map-head"><div><h1>Bản đồ quản lý rừng</h1><p>OpenStreetMap • định vị nhanh • waypoint • tracklog</p></div><a class="button compact-button" href="/api/export/geojson">Tải GeoJSON</a></div>
+<div class="page-head map-head"><div><h1>Bản đồ quản lý rừng</h1><p>Giám sát hiện trường • dữ liệu nhóm • làm việc offline</p></div><div class="map-head-actions"><button id="panelToggle" class="button compact-button" type="button">☰ Công cụ</button><a class="button compact-button" href="/api/export/geojson">⇩ GeoJSON</a></div></div>
 <div class="map-layout">
-  <aside class="map-tools" id="mapTools">
+  <aside class="map-tools ifmc-drawer" id="mapTools" aria-label="Bảng điều khiển bản đồ"><div class="drawer-title"><span><b>HUFM</b><small>Forest Management</small></span><button id="panelClose" type="button" aria-label="Đóng bảng công cụ">×</button></div>
     <div class="mobile-tool-handle" aria-hidden="true"></div>
     <div class="map-actions-grid">
       <button id="locateBtn" class="primary">📍 Định vị</button>
@@ -10,6 +10,17 @@
       <button id="stopTrackBtn" disabled>⏹ Dừng và lưu</button>
     </div>
     <div id="status" class="status" role="status" aria-live="polite">Sẵn sàng.</div>
+    <div class="network-bar"><span id="networkDot"></span><b id="networkText">Đang kiểm tra mạng</b><span id="pendingCount">0 bản ghi chờ</span></div>
+    <details class="data-panel offline-panel" open>
+      <summary>🗺️ Bản đồ và dữ liệu offline</summary>
+      <div class="offline-controls">
+        <label>Mức zoom tải về<select id="offlineZoom"><option value="12-14">12–14 (khu vực rộng)</option><option value="13-15" selected>13–15 (khuyến nghị)</option><option value="14-16">14–16 (chi tiết)</option></select></label>
+        <button id="downloadOfflineBtn" type="button" class="primary">Tải vùng đang xem</button>
+        <button id="syncNowBtn" type="button">Đồng bộ ngay</button>
+        <button id="clearOfflineBtn" type="button" class="danger">Xóa bản đồ offline</button>
+        <div id="offlineStatus" class="source-note">Vùng tải được tính theo khung bản đồ hiện tại.</div>
+      </div>
+    </details>
     <details class="data-panel" open><summary>Dữ liệu hiển thị</summary><div id="dataList" class="data-list"></div></details>
     <details class="data-panel fire-panel" open>
       <summary>🔥 Cảnh báo cháy rừng thành phố Huế</summary>
@@ -32,7 +43,17 @@
       <div id="layerList" class="data-list layer-list"></div>
     </details>
   </aside>
-  <div id="map" aria-label="Bản đồ quản lý rừng"></div>
+  <div class="map-stage">
+    <div id="map" aria-label="Bản đồ quản lý rừng"></div>
+    <div class="map-corner-actions" aria-label="Công cụ tải dữ liệu và lớp bản đồ">
+      <button id="reloadDataBtn" type="button" title="Tải lại waypoint và tracklog">↻ <span>Dữ liệu</span></button>
+      <button id="reloadLayersBtn" type="button" title="Tải lại các lớp bản đồ">▧ <span>Lớp bản đồ</span></button>
+    </div>
+    <div class="live-location-card" id="liveLocationCard" aria-live="polite">
+      <b id="liveLocationState">GPS chưa bật</b>
+      <span id="liveLocationDetail">Bấm Định vị để theo dõi realtime</span>
+    </div>
+  </div>
 </div>
 <div id="modal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle"><div class="modal-box"><h3 id="modalTitle">Lưu dữ liệu</h3><label>Tên<input id="itemName"></label><label>Mô tả<textarea id="itemDescription"></textarea></label><label id="categoryWrap">Phân loại<select id="itemCategory"><option>Chốt bảo vệ rừng</option><option>Khu vực nguy cơ</option><option>Dấu vết vi phạm</option><option>Điểm tuần tra</option><option>Khác</option></select></label><div class="actions"><button id="cancelModal">Hủy</button><button id="saveModal" class="primary">Lưu</button></div></div></div>
-<script>window.APP_USER=<%- JSON.stringify(currentUser) %>;</script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script><script src="/map.js"></script><%- include('partials/footer') %>
+<script>window.APP_USER=<%- JSON.stringify(currentUser) %>;</script><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script><script src="https://unpkg.com/leaflet.vectorgrid@1.3.0/dist/Leaflet.VectorGrid.bundled.js"></script><script src="/offline-db.js"></script><script src="/map.js"></script><%- include('partials/footer') %>

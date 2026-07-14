@@ -23,6 +23,9 @@ const ADMIN_API_BASE = process.env.ADMIN_API_BASE || 'https://34tinhthanh.com';
 const PCCCR_PORTAL_URL = process.env.PCCCR_PORTAL_URL || 'https://v2.pcccr.vn/diem-chay';
 const PCCCR_API_URL = process.env.PCCCR_API_URL || '';
 const PCCCR_API_TOKEN = process.env.PCCCR_API_TOKEN || '';
+const TOPO_TILE_URL = process.env.TOPO_TILE_URL || 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
+const OFFLINE_TILE_URL = process.env.OFFLINE_TILE_URL || TOPO_TILE_URL;
+const OFFLINE_TILE_MAX = Number(process.env.OFFLINE_TILE_MAX || 1200);
 
 async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
@@ -97,6 +100,12 @@ const Tracklog = sequelize.define('Tracklog', {
   endedAt: DataTypes.DATE
 });
 
+const SyncReceipt = sequelize.define('SyncReceipt', {
+  clientId: { type: DataTypes.STRING, allowNull: false, unique: true },
+  recordType: { type: DataTypes.ENUM('waypoint', 'track'), allowNull: false },
+  serverRecordId: DataTypes.INTEGER
+});
+
 const MapLayer = sequelize.define('MapLayer', {
   name: { type: DataTypes.STRING, allowNull: false },
   description: DataTypes.TEXT,
@@ -133,7 +142,7 @@ app.use(helmet({
       defaultSrc: ["'self'"],
       scriptSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
       styleSrc: ["'self'", "'unsafe-inline'", 'https://unpkg.com'],
-      imgSrc: ["'self'", 'data:', 'blob:', 'https://*.tile.openstreetmap.org'],
+      imgSrc: ["'self'", 'data:', 'blob:', 'https://*.tile.openstreetmap.org', 'https://*.tile.opentopomap.org'],
       connectSrc: ["'self'", 'blob:'],
       fontSrc: ["'self'", 'data:']
     }
@@ -354,6 +363,40 @@ app.get('/api/fire-alerts', requireAuth, async (req, res) => {
   }
 });
 
+
+
+app.get('/api/app-config', requireAuth, (req, res) => {
+  res.json({ topoTileUrl: TOPO_TILE_URL, offlineTileUrl: OFFLINE_TILE_URL, offlineTileMax: OFFLINE_TILE_MAX });
+});
+
+app.post('/api/sync', requireAuth, async (req, res) => {
+  const records = Array.isArray(req.body.records) ? req.body.records.slice(0, 200) : [];
+  const results = [];
+  for (const item of records) {
+    const clientId = String(item.clientId || '').slice(0, 120);
+    const type = item.type;
+    const payload = item.payload || {};
+    if (!clientId || !['waypoint','track'].includes(type)) { results.push({ clientId, ok:false, error:'Bản ghi đồng bộ không hợp lệ.' }); continue; }
+    const existing = await SyncReceipt.findOne({ where: { clientId } });
+    if (existing) { results.push({ clientId, ok:true, duplicate:true, serverRecordId:existing.serverRecordId }); continue; }
+    try {
+      let record;
+      if (type === 'waypoint') {
+        const lat=Number(payload.latitude), lng=Number(payload.longitude);
+        if (!Number.isFinite(lat) || !Number.isFinite(lng)) throw new Error('Tọa độ không hợp lệ.');
+        record = await Waypoint.create({ name:(payload.name||'Điểm offline').trim(), description:payload.description||'', category:payload.category||'Khác', latitude:lat, longitude:lng, accuracy:Number(payload.accuracy)||null, userId:req.session.user.id, groupId:req.session.user.groupId||null });
+      } else {
+        const points = Array.isArray(payload.points) ? payload.points.filter(q=>Number.isFinite(Number(q.lat))&&Number.isFinite(Number(q.lng))).map(q=>({lat:Number(q.lat),lng:Number(q.lng),accuracy:Number(q.accuracy)||null,time:q.time||new Date().toISOString()})) : [];
+        if (points.length < 2) throw new Error('Tracklog cần ít nhất 2 điểm.');
+        let distance=0; for(let i=1;i<points.length;i++) distance += haversine(points[i-1],points[i]);
+        record = await Tracklog.create({ name:(payload.name||'Track offline').trim(), description:payload.description||'', points, distanceMeters:Math.round(distance), startedAt:points[0].time, endedAt:points.at(-1).time, userId:req.session.user.id, groupId:req.session.user.groupId||null });
+      }
+      await SyncReceipt.create({ clientId, recordType:type, serverRecordId:record.id });
+      results.push({ clientId, ok:true, serverRecordId:record.id });
+    } catch (error) { results.push({ clientId, ok:false, error:error.message }); }
+  }
+  res.json({ results, synced: results.filter(x=>x.ok).length });
+});
 
 app.get('/api/map-data', requireAuth, async (req, res) => {
   const scope = dataScope(req.session.user);

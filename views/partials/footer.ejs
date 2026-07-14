@@ -17,4 +17,22 @@
   }));
 })();
 </script>
+
+<script>
+(() => {
+  const drawer = document.getElementById('mapTools');
+  const openBtn = document.getElementById('panelToggle');
+  const closeBtn = document.getElementById('panelClose');
+  if (!drawer) return;
+  const setOpen = (open) => {
+    drawer.classList.toggle('is-collapsed', !open);
+    if (openBtn) openBtn.setAttribute('aria-expanded', String(open));
+    setTimeout(() => window.dispatchEvent(new Event('resize')), 280);
+  };
+  openBtn?.addEventListener('click', () => setOpen(drawer.classList.contains('is-collapsed')));
+  closeBtn?.addEventListener('click', () => setOpen(false));
+  if (window.matchMedia('(max-width: 700px)').matches) setOpen(false);
+})();
+</script>
+<script>if('serviceWorker' in navigator){window.addEventListener('load',()=>navigator.serviceWorker.register('/sw.js').catch(console.error));}</script>
 </body></html>
