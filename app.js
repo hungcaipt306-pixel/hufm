@@ -220,6 +220,27 @@ app.use('/vendor/leaflet', express.static(path.join(__dirname, 'node_modules', '
 app.use('/vendor/vectorgrid', express.static(path.join(__dirname, 'node_modules', 'leaflet.vectorgrid', 'dist')));
 app.use((req, res, next) => { res.setHeader('Permissions-Policy', 'geolocation=(self), accelerometer=(self), gyroscope=(self), magnetometer=(self)'); next(); });
 
+// Same-origin OpenStreetMap tile proxy: avoids mobile/CDN/CSP failures while preserving OSM attribution.
+app.get('/api/base-tiles/osm/:z/:x/:y.png', async (req, res) => {
+  const z=Number(req.params.z), x=Number(req.params.x), y=Number(req.params.y);
+  const max=Math.pow(2,z);
+  if(!Number.isInteger(z)||!Number.isInteger(x)||!Number.isInteger(y)||z<0||z>19||x<0||y<0||x>=max||y>=max) return res.status(400).end();
+  const sub=['a','b','c'][(x+y)%3];
+  const upstream=`https://${sub}.tile.openstreetmap.org/${z}/${x}/${y}.png`;
+  try {
+    const response=await fetch(upstream,{headers:{'User-Agent':'HUFM-Hue-Forest-Manager/1.2 (forest-management-webapp)','Accept':'image/avif,image/webp,image/png,image/*,*/*;q=0.8'},signal:AbortSignal.timeout(12000)});
+    if(!response.ok) return res.status(response.status).end();
+    const body=Buffer.from(await response.arrayBuffer());
+    res.setHeader('Content-Type',response.headers.get('content-type')||'image/png');
+    res.setHeader('Cache-Control','public, max-age=86400, stale-while-revalidate=604800');
+    res.setHeader('X-Map-Source','OpenStreetMap');
+    res.send(body);
+  } catch(error) {
+    console.error('OSM tile proxy error:',error.message);
+    res.status(502).end();
+  }
+});
+
 const SequelizeStore = SequelizeStoreFactory(session.Store);
 const sessionStore = new SequelizeStore({ db: sequelize });
 app.use(session({
@@ -528,13 +549,50 @@ app.get('/dashboard', requireAuth, async (req, res) => {
 
 app.get('/map', requireAuth, (req, res) => res.render('map'));
 
+function canonicalAdministrativeName(value='') {
+  const text=deepRepairVietnamese(String(value||'')).trim();
+  const plain=text.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();
+  if(plain.includes('hoang sa')) return 'Đặc khu Hoàng Sa';
+  if(plain.includes('truong sa')) return 'Đặc khu Trường Sa';
+  return text;
+}
+function normalizeAdministrativeUnit(unit={}) {
+  const result={...unit};
+  for(const key of ['name','ward_name','province_name','new_name','old_name']) if(result[key]) result[key]=canonicalAdministrativeName(result[key]);
+  return result;
+}
+const specialUnitCache={expiresAt:0,value:null};
+async function loadSpecialAdministrativeUnits(){
+  if(specialUnitCache.value&&specialUnitCache.expiresAt>Date.now()) return specialUnitCache.value;
+  const fallback=[{name:'Đặc khu Hoàng Sa',provinceName:'Thành phố Đà Nẵng'},{name:'Đặc khu Trường Sa',provinceName:'Tỉnh Khánh Hòa'}];
+  try{
+    const results=await Promise.all(['Hoang Sa','Truong Sa'].map(q=>fetchJsonWithTimeout(`${ADMIN_API_BASE}/api/search?q=${encodeURIComponent(q)}`,{},10000)));
+    const found=[];
+    for(const payload of results){
+      const items=Array.isArray(payload)?payload:(payload?.results||payload?.data||[]);
+      for(const raw of items){
+        const item=normalizeAdministrativeUnit(raw);
+        const name=canonicalAdministrativeName(item.ward_name||item.name||'');
+        if(name==='Đặc khu Hoàng Sa'||name==='Đặc khu Trường Sa') found.push({...item,name});
+      }
+    }
+    const unique=[...new Map(found.map(x=>[x.name,x])).values()];
+    specialUnitCache.value=unique.length?unique:fallback;
+  }catch(error){specialUnitCache.value=fallback;}
+  specialUnitCache.expiresAt=Date.now()+24*60*60*1000;
+  return specialUnitCache.value;
+}
 app.get('/api/admin-units/hue', requireAuth, async (req, res) => {
   try {
-    const wards = await fetchJsonWithTimeout(`${ADMIN_API_BASE}/api/wards?province_code=${HUE_PROVINCE_CODE}`);
-    res.json({ provinceCode: HUE_PROVINCE_CODE, provinceName: 'Thành phố Huế', wards: Array.isArray(wards) ? wards : [], source: '34tinhthanh.com', fetchedAt: new Date().toISOString() });
+    const [wards,specialUnits] = await Promise.all([
+      fetchJsonWithTimeout(`${ADMIN_API_BASE}/api/wards?province_code=${HUE_PROVINCE_CODE}`),
+      loadSpecialAdministrativeUnits()
+    ]);
+    const normalized=Array.isArray(wards)?wards.map(normalizeAdministrativeUnit):[];
+    res.json({ provinceCode:HUE_PROVINCE_CODE, provinceName:'Thành phố Huế', wards:normalized, specialUnits, source:'34tinhthanh.com', fetchedAt:new Date().toISOString() });
   } catch (error) {
     console.error('Không tải được đơn vị hành chính Huế:', error.message);
-    res.status(502).json({ error: 'Không tải được danh sách phường/xã từ 34tinhthanh.com.', wards: [] });
+    res.status(502).json({ error:'Không tải được danh sách phường/xã từ 34tinhthanh.com.', wards:[], specialUnits:await loadSpecialAdministrativeUnits() });
   }
 });
 

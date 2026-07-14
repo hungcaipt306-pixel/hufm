@@ -10,16 +10,27 @@ const showMapLoading=(message='Đang tải bản đồ…')=>{if(mapLoading){map
 window.addEventListener('load', () => setTimeout(() => map.invalidateSize(true), 180));
 window.addEventListener('resize', () => map.invalidateSize(false));
 if('ResizeObserver' in window){new ResizeObserver(()=>map.invalidateSize(false)).observe(document.getElementById('map'));}
-const tileOptions={maxZoom:19,updateWhenIdle:false,keepBuffer:4,crossOrigin:true,attribution:'&copy; OpenStreetMap contributors'};
-const streetLayer = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', tileOptions).addTo(map);
-const topoLayer = L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { ...tileOptions,maxZoom:17,attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap' });
-let streetTileErrors=0,topoTileErrors=0,fallbackActivated=false;
-streetLayer.on('loading',()=>showMapLoading('Đang tải bản đồ nền…'));
+const tileOptions={maxZoom:19,updateWhenIdle:false,keepBuffer:4,attribution:'&copy; OpenStreetMap contributors'};
+// Ưu tiên proxy cùng tên miền HUFM; nếu proxy lỗi sẽ thử OSM trực tiếp rồi mới chuyển địa hình.
+const streetProxyUrl='/api/base-tiles/osm/{z}/{x}/{y}.png';
+const streetDirectUrl='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+const streetLayer=L.tileLayer(streetProxyUrl,tileOptions).addTo(map);
+const topoLayer=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png',{...tileOptions,maxZoom:17,attribution:'Bản đồ địa hình &copy; OpenTopoMap, dữ liệu &copy; OpenStreetMap'});
+let streetTileErrors=0,topoTileErrors=0,streetSource='proxy',fallbackActivated=false;
+streetLayer.on('loading',()=>showMapLoading('Đang tải OpenStreetMap…'));
 streetLayer.on('tileload',()=>{streetTileErrors=0;hideMapLoading();});
-streetLayer.on('load',hideMapLoading);
-streetLayer.on('tileerror',()=>{streetTileErrors++;if(streetTileErrors>=4&&!fallbackActivated){fallbackActivated=true;map.removeLayer(streetLayer);topoLayer.addTo(map);showMapLoading('Đang chuyển sang bản đồ địa hình dự phòng…');status('Nguồn bản đồ đường phố phản hồi chậm, đã chuyển sang địa hình dự phòng.');}});
+streetLayer.on('load',()=>{hideMapLoading();status('Bản đồ OpenStreetMap đã sẵn sàng.');});
+streetLayer.on('tileerror',()=>{
+  streetTileErrors++;
+  if(streetTileErrors<4)return;
+  if(streetSource==='proxy'){
+    streetSource='direct';streetTileErrors=0;streetLayer.setUrl(streetDirectUrl,false);streetLayer.redraw();
+    showMapLoading('Đang thử nguồn OpenStreetMap dự phòng…');status('Đang chuyển sang nguồn OpenStreetMap dự phòng.');return;
+  }
+  if(!fallbackActivated){fallbackActivated=true;map.removeLayer(streetLayer);topoLayer.addTo(map);showMapLoading('Đang chuyển sang bản đồ địa hình…');status('OpenStreetMap tạm thời không phản hồi, đã chuyển sang địa hình dự phòng.');}
+});
 topoLayer.on('tileload',()=>{topoTileErrors=0;hideMapLoading();});
-topoLayer.on('load',hideMapLoading);
+topoLayer.on('load',()=>{hideMapLoading();status('Bản đồ địa hình đã sẵn sàng.');});
 topoLayer.on('tileerror',()=>{topoTileErrors++;if(topoTileErrors>=5){hideMapLoading();status('Không tải được bản đồ nền. Kiểm tra Internet rồi bấm Cập nhật.');}});
 setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-tile-loaded'))hideMapLoading();},900);
 
@@ -209,10 +220,17 @@ window.zoomLayer = id => {
 };
 window.deleteLayer = async id => {
   if (!confirm('Xóa lớp bản đồ này?')) return;
-  await api(`/api/layers/${id}`, { method: 'DELETE' });
-  removeUploadedLayer(id);
-  await loadLayers();
-  status('Đã xóa lớp bản đồ.');
+  try {
+    await api(`/api/layers/${id}`, { method:'DELETE' });
+    removeUploadedLayer(id);
+    await loadLayers();
+    map.invalidateSize(false);
+    status('Đã xóa lớp bản đồ thành công và tự động cập nhật lại.');
+    showToast('Đã xóa lớp bản đồ thành công');
+  } catch(error) {
+    status(`Không thể xóa lớp: ${error.message}`);
+    showToast('Xóa lớp chưa thành công');
+  }
 };
 
 function updateLiveLocationCard(position) {
@@ -436,6 +454,8 @@ async function loadHueWards() {
   try {
     const data = await api('/api/admin-units/hue');
     const wards = [...(data.wards || [])].sort((a,b) => String(a.ward_name || a.name || '').localeCompare(String(b.ward_name || b.name || ''), 'vi'));
+    const specialNote=document.getElementById('specialUnitsNote');
+    if(specialNote){const names=(data.specialUnits||[]).map(x=>x.name||x.ward_name).filter(Boolean);specialNote.textContent=names.length?`Đơn vị biển đảo theo 34tinhthanh.com: ${names.join(' • ')}`:'Đơn vị biển đảo: Đặc khu Hoàng Sa • Đặc khu Trường Sa';}
     for (const ward of wards) {
       const option = document.createElement('option');
       option.value = ward.ward_code || ward.code || '';

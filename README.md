@@ -155,3 +155,8 @@ Bảng chọn lớp Leaflet được thu gọn thành nút nhỏ ở mép trái 
 ## Tạo tài khoản bởi Admin và nhập CSV
 
 Admin có thể tạo trực tiếp tài khoản user/mod tại **Tài khoản**, hoặc tải file mẫu `public/templates/mau-tai-khoan-hufm.csv`, điền tối đa 1.000 dòng và tải lên. Các cột bắt buộc là `name`, `email`, `password`; các cột tùy chọn gồm `role`, `phone`, `unit`, `group_name`, `status`. `role` chỉ nhận `user` hoặc `mod`; `status` nhận `approved` hoặc `pending`; `group_name` phải trùng tên nhóm đã tạo trong HUFM.
+
+## Cập nhật bản đồ nền và đơn vị biển đảo
+- OpenStreetMap được tải qua proxy cùng tên miền `/api/base-tiles/osm/...`, có chuyển sang nguồn OSM trực tiếp và OpenTopoMap khi nguồn trước không phản hồi.
+- Tên đơn vị biển đảo được chuẩn hóa theo dữ liệu hành chính mới: **Đặc khu Hoàng Sa** và **Đặc khu Trường Sa**.
+- Sau khi xóa lớp bản đồ, giao diện hiển thị thông báo thành công và tự động tải lại danh sách lớp.
