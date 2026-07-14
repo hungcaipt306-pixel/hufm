@@ -132,6 +132,20 @@ let appConfig = { offlineTileUrl:'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.p
 let cachedMapData = { waypoints:[], tracks:[] };
 const statusEl = document.getElementById('status');
 const modal = document.getElementById('modal');
+// Mở/đóng bảng Công cụ hoạt động giống nhau trong Safari và PWA cài trên màn hình chính.
+const mapToolsPanel = document.getElementById('mapTools');
+const panelToggleButtons = [document.getElementById('panelToggle'), document.getElementById('floatingPanelToggle')].filter(Boolean);
+const panelCloseButton = document.getElementById('panelClose');
+function setToolsPanel(open) {
+  if (!mapToolsPanel) return;
+  mapToolsPanel.classList.toggle('is-collapsed', !open);
+  panelToggleButtons.forEach(button => button.setAttribute('aria-expanded', String(open)));
+  if (open) setTimeout(() => map.invalidateSize(false), 220);
+}
+panelToggleButtons.forEach(button => button.addEventListener('click', () => setToolsPanel(mapToolsPanel?.classList.contains('is-collapsed'))));
+panelCloseButton?.addEventListener('click', () => setToolsPanel(false));
+if (window.matchMedia('(max-width: 700px)').matches) setToolsPanel(false);
+
 
 function status(text) { statusEl.textContent = text; }
 function esc(value = '') {
@@ -249,7 +263,7 @@ async function loadLayers() {
       try { await createUploadedLayer(meta); } catch (e) { console.error(e); }
     }
     const count = meta.layerType === 'mbtiles' ? `${meta.metadata?.tileCount || 0} tile` : `${meta.metadata?.featureCount || 0} đối tượng`;
-    list.insertAdjacentHTML('beforeend', `<div class="data-item" data-layer-id="${meta.id}"><span class="layer-type">${esc(meta.layerType)}</span> <b>${esc(meta.name)}</b><br><small>${formatBytes(meta.sizeBytes)} • ${esc(count)} • ${esc(meta.User?.name || '')}</small><div class="layer-row-actions"><button type="button" onclick="zoomLayer(${meta.id})">Xem</button><button type="button" onclick="toggleLayer(${meta.id})">Bật/tắt</button><button type="button" class="danger" onclick="deleteLayer(${meta.id}, this)">Xóa</button></div></div>`);
+    list.insertAdjacentHTML('beforeend', `<div class="data-item" data-layer-id="${meta.id}"><span class="layer-type">${esc(meta.layerType)}</span> <b>${esc(meta.name)}</b><br><small>${formatBytes(meta.sizeBytes)} • ${esc(count)} • ${esc(meta.User?.name || '')}</small><div class="layer-row-actions"><button type="button" onclick="zoomLayer(${meta.id})">Xem</button><button type="button" onclick="toggleLayer(${meta.id})">Bật/tắt</button><button type="button" class="danger" onclick="deleteLayer(${meta.id}, this, ${JSON.stringify(meta.name)})">Xóa</button></div></div>`);
   }
   if (!layers.length) list.innerHTML = '<div class="layer-empty">Chưa có lớp bản đồ được tải lên.</div>';
 }
@@ -274,8 +288,48 @@ window.zoomLayer = id => {
   const b = String(item.meta.metadata?.bounds || '').split(',').map(Number);
   if (b.length === 4 && b.every(Number.isFinite)) map.fitBounds([[b[1], b[0]], [b[3], b[2]]], { padding: [25, 25] });
 };
-window.deleteLayer = async (id, button) => {
-  if (!confirm('Bạn có chắc muốn xóa lớp bản đồ này? Thao tác không thể hoàn tác.')) return;
+function askDeleteLayer(layerName = '') {
+  const modal = document.getElementById('confirmDeleteModal');
+  const nameBox = document.getElementById('confirmDeleteLayerName');
+  const accept = document.getElementById('confirmDeleteAccept');
+  const cancel = document.getElementById('confirmDeleteCancel');
+  if (!modal || !accept || !cancel) return Promise.resolve(confirm('Bạn có chắc muốn xóa lớp bản đồ này? Thao tác không thể hoàn tác.'));
+  nameBox.textContent = layerName ? `Lớp: ${layerName}` : '';
+  modal.classList.remove('hidden');
+  document.body.classList.add('dialog-open');
+  return new Promise(resolve => {
+    let finished = false;
+    const finish = value => {
+      if (finished) return;
+      finished = true;
+      modal.classList.add('hidden');
+      document.body.classList.remove('dialog-open');
+      accept.removeEventListener('click', onAccept);
+      cancel.removeEventListener('click', onCancel);
+      modal.querySelector('[data-confirm-cancel]')?.removeEventListener('click', onCancel);
+      document.removeEventListener('keydown', onKey);
+      resolve(value);
+    };
+    const onAccept = () => finish(true);
+    const onCancel = () => finish(false);
+    const onKey = event => {
+      if (event.key === 'Escape') finish(false);
+      if (event.key === 'Enter') finish(true);
+    };
+    accept.addEventListener('click', onAccept);
+    cancel.addEventListener('click', onCancel);
+    modal.querySelector('[data-confirm-cancel]')?.addEventListener('click', onCancel);
+    document.addEventListener('keydown', onKey);
+    setTimeout(() => accept.focus(), 30);
+  });
+}
+
+window.deleteLayer = async (id, button, layerName = '') => {
+  const approved = await askDeleteLayer(layerName);
+  if (!approved) {
+    showToast('Đã hủy xóa lớp bản đồ');
+    return;
+  }
   const originalText = button?.textContent || 'Xóa';
   if (button) { button.disabled = true; button.textContent = 'Đang xóa…'; }
   try {
@@ -291,7 +345,7 @@ window.deleteLayer = async (id, button) => {
     await loadLayers();
     map.invalidateSize(true);
     status(result?.message || 'Đã xóa lớp bản đồ thành công và tự động cập nhật lại.');
-    showToast('Đã xóa lớp bản đồ thành công');
+    showToast('✓ Đã xóa lớp bản đồ thành công');
   } catch(error) {
     console.error('Không thể xóa lớp bản đồ:', error);
     status(`Không thể xóa lớp: ${error.message}`);

@@ -396,6 +396,7 @@ function parseCsv(text) {
   if (!rows.length) return [];
   const aliases = {
     'họ tên':'name','ho ten':'name','tên':'name','ten':'name','name':'name',
+    'username':'username','tên đăng nhập':'username','ten dang nhap':'username','tài khoản':'username','tai khoan':'username',
     'email':'email','thư điện tử':'email','thu dien tu':'email',
     'mật khẩu':'password','mat khau':'password','password':'password',
     'vai trò':'role','vai tro':'role','role':'role',
@@ -410,6 +411,19 @@ function parseCsv(text) {
   return rows.map((values,index)=>({ line:index+2, data:Object.fromEntries(headers.map((h,i)=>[h,repairVietnameseMojibake(values[i]||'').trim()])) }));
 }
 function validEmail(value) { return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || '').toLowerCase()); }
+function normalizeUsername(value) {
+  return String(value || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/[^a-z0-9._-]+/g, '');
+}
+function loginKeyToEmail(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (raw.includes('@')) return raw; // tương thích tài khoản email cũ
+  const username = normalizeUsername(raw);
+  return username ? `${username}@hufm.local` : '';
+}
+function displayLogin(value) {
+  const text = String(value || '');
+  return text.endsWith('@hufm.local') ? text.slice(0, -11) : text;
+}
 function deepRepairVietnamese(value) {
   if (typeof value === 'string') return repairVietnameseMojibake(value);
   if (Array.isArray(value)) return value.map(deepRepairVietnamese);
@@ -532,14 +546,16 @@ app.get('/', (req, res) => res.redirect(req.session.user ? '/map' : '/login'));
 app.get('/register', (req, res) => res.render('register'));
 app.post('/register', async (req, res) => {
   try {
-    const { name, email, password, phone, unit } = req.body;
-    if (!name || !email || !password || password.length < 8) {
-      flash(req, 'error', 'Vui lòng nhập đủ thông tin; mật khẩu tối thiểu 8 ký tự.');
+    const { name, username, password, phone, unit } = req.body;
+    const cleanUsername = normalizeUsername(username);
+    const email = loginKeyToEmail(cleanUsername);
+    if (!name || cleanUsername.length < 3 || !password || password.length < 8) {
+      flash(req, 'error', 'Vui lòng nhập họ tên, tên đăng nhập từ 3 ký tự và mật khẩu tối thiểu 8 ký tự.');
       return res.redirect('/register');
     }
-    const exists = await User.findOne({ where: { email: email.trim().toLowerCase() } });
-    if (exists) { flash(req, 'error', 'Email đã được sử dụng.'); return res.redirect('/register'); }
-    await User.create({ name: name.trim(), email: email.trim().toLowerCase(), passwordHash: await bcrypt.hash(password, 12), phone, unit, role: 'user', status: 'pending' });
+    const exists = await User.findOne({ where: { email } });
+    if (exists) { flash(req, 'error', 'Tên đăng nhập đã được sử dụng.'); return res.redirect('/register'); }
+    await User.create({ name: name.trim(), email, passwordHash: await bcrypt.hash(password, 12), phone, unit, role: 'user', status: 'pending' });
     flash(req, 'success', 'Đăng ký thành công. Tài khoản đang chờ quản trị viên phê duyệt.');
     res.redirect('/login');
   } catch (e) { console.error(e); flash(req, 'error', 'Không thể đăng ký tài khoản.'); res.redirect('/register'); }
@@ -547,15 +563,15 @@ app.post('/register', async (req, res) => {
 
 app.get('/login', (req, res) => res.render('login'));
 app.post('/login', async (req, res) => {
-  const email = (req.body.email || '').trim().toLowerCase();
+  const email = loginKeyToEmail(req.body.username || req.body.email);
   const user = await User.findOne({ where: { email }, include: Group });
   if (!user || !(await bcrypt.compare(req.body.password || '', user.passwordHash))) {
-    flash(req, 'error', 'Email hoặc mật khẩu không đúng.'); return res.redirect('/login');
+    flash(req, 'error', 'Tên đăng nhập hoặc mật khẩu không đúng.'); return res.redirect('/login');
   }
   if (user.status !== 'approved') {
     flash(req, 'error', user.status === 'pending' ? 'Tài khoản đang chờ phê duyệt.' : 'Tài khoản đã bị từ chối.'); return res.redirect('/login');
   }
-  req.session.user = { id: user.id, name: user.name, email: user.email, role: user.role, groupId: user.groupId, groupName: user.Group?.name || null };
+  req.session.user = { id: user.id, name: user.name, email: user.email, username: displayLogin(user.email), role: user.role, groupId: user.groupId, groupName: user.Group?.name || null };
   res.redirect('/map');
 });
 app.post('/logout', (req, res) => req.session.destroy(() => res.redirect('/login')));
@@ -921,15 +937,16 @@ app.get('/admin/users', requireRole('admin'), async (req, res) => {
 app.post('/admin/users/create', requireRole('admin'), async (req, res) => {
   try {
     const name = repairVietnameseMojibake(req.body.name || '').trim();
-    const email = String(req.body.email || '').trim().toLowerCase();
+    const username = normalizeUsername(req.body.username || req.body.email);
+    const email = loginKeyToEmail(username);
     const password = String(req.body.password || '');
     const role = ['user','mod'].includes(req.body.role) ? req.body.role : 'user';
-    if (!name || !validEmail(email) || password.length < 8) throw new Error('Họ tên, email hợp lệ và mật khẩu từ 8 ký tự là bắt buộc.');
-    if (await User.count({ where:{ email } })) throw new Error('Email đã tồn tại.');
+    if (!name || username.length < 3 || password.length < 8) throw new Error('Họ tên, tên đăng nhập từ 3 ký tự và mật khẩu từ 8 ký tự là bắt buộc.');
+    if (await User.count({ where:{ email } })) throw new Error('Tên đăng nhập đã tồn tại.');
     const groupId = req.body.groupId ? Number(req.body.groupId) : null;
     if (groupId && !(await Group.findByPk(groupId))) throw new Error('Nhóm được chọn không tồn tại.');
     await User.create({ name, email, passwordHash:await bcrypt.hash(password,12), phone:repairVietnameseMojibake(req.body.phone||'').trim(), unit:repairVietnameseMojibake(req.body.unit||'').trim(), role, status:'approved', groupId });
-    flash(req,'success',`Đã tạo tài khoản ${email} với vai trò ${role}.`);
+    flash(req,'success',`Đã tạo tài khoản ${username} với vai trò ${role}.`);
   } catch (error) { flash(req,'error',error.message || 'Không thể tạo tài khoản.'); }
   res.redirect('/admin/users');
 });
@@ -944,26 +961,26 @@ app.post('/admin/users/import', requireRole('admin'), csvUpload.single('csvFile'
     result.total = rows.length;
     const groups = await Group.findAll();
     const groupMap = new Map(groups.map(g=>[repairVietnameseMojibake(g.name).trim().toLowerCase(),g.id]));
-    const emails = rows.map(r=>String(r.data.email||'').trim().toLowerCase()).filter(Boolean);
+    const emails = rows.map(r=>loginKeyToEmail(r.data.username||r.data.email)).filter(Boolean);
     const existing = new Set((await User.findAll({ where:{email:{[Op.in]:emails}}, attributes:['email'] })).map(u=>u.email.toLowerCase()));
     const seen = new Set();
     for (const row of rows) {
-      const d=row.data, name=repairVietnameseMojibake(d.name||'').trim(), email=String(d.email||'').trim().toLowerCase(), password=String(d.password||'');
+      const d=row.data, name=repairVietnameseMojibake(d.name||'').trim(), username=normalizeUsername(d.username||d.email), email=loginKeyToEmail(username), password=String(d.password||'');
       const role=String(d.role||'user').trim().toLowerCase(), status=String(d.status||'approved').trim().toLowerCase();
       const errors=[];
       if(!name) errors.push('thiếu họ tên');
-      if(!validEmail(email)) errors.push('email không hợp lệ');
+      if(username.length<3) errors.push('tên đăng nhập phải có ít nhất 3 ký tự');
       if(password.length<8) errors.push('mật khẩu dưới 8 ký tự');
       if(!['user','mod'].includes(role)) errors.push('vai trò chỉ được user hoặc mod');
       if(!['approved','pending'].includes(status)) errors.push('trạng thái chỉ được approved hoặc pending');
-      if(existing.has(email)||seen.has(email)) errors.push('email đã tồn tại hoặc bị trùng trong file');
+      if(existing.has(email)||seen.has(email)) errors.push('tên đăng nhập đã tồn tại hoặc bị trùng trong file');
       let groupId=null; const groupName=repairVietnameseMojibake(d.group_name||'').trim();
       if(groupName){ groupId=groupMap.get(groupName.toLowerCase())||null; if(!groupId) errors.push(`không tìm thấy nhóm “${groupName}”`); }
-      if(errors.length){ result.skipped.push({line:row.line,email:email||'(trống)',reason:errors.join('; ')}); continue; }
+      if(errors.length){ result.skipped.push({line:row.line,email:username||'(trống)',reason:errors.join('; ')}); continue; }
       try {
         await User.create({ name,email,passwordHash:await bcrypt.hash(password,12),role,status,phone:repairVietnameseMojibake(d.phone||'').trim(),unit:repairVietnameseMojibake(d.unit||'').trim(),groupId });
-        seen.add(email); existing.add(email); result.created.push({line:row.line,email,role,group:groupName||''});
-      } catch(error){ result.skipped.push({line:row.line,email,reason:error.name==='SequelizeUniqueConstraintError'?'email đã tồn tại':'lỗi cơ sở dữ liệu'}); }
+        seen.add(email); existing.add(email); result.created.push({line:row.line,email:username,role,group:groupName||''});
+      } catch(error){ result.skipped.push({line:row.line,email,reason:error.name==='SequelizeUniqueConstraintError'?'tên đăng nhập đã tồn tại':'lỗi cơ sở dữ liệu'}); }
     }
     req.session.importResult=result;
     flash(req,'success',`Đã tạo ${result.created.length}/${result.total} tài khoản; bỏ qua ${result.skipped.length} dòng.`);

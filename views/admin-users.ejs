@@ -6,7 +6,7 @@
     <div class="section-heading"><div><h2>Tạo tài khoản</h2><p>Tài khoản do Admin tạo được kích hoạt ngay.</p></div><span class="badge approved">user / mod</span></div>
     <form method="post" action="/admin/users/create" class="admin-account-form">
       <label>Họ và tên<input name="name" required maxlength="120" autocomplete="off"></label>
-      <label>Email<input name="email" type="email" required autocomplete="off"></label>
+      <label>Tên đăng nhập<input name="username" minlength="3" pattern="[A-Za-z0-9._-]+" required autocapitalize="none" autocomplete="off"><small>Chữ không dấu, số, dấu chấm, gạch ngang hoặc gạch dưới.</small></label>
       <label>Mật khẩu ban đầu<input name="password" type="password" required minlength="8" autocomplete="new-password"></label>
       <label>Vai trò<select name="role"><option value="user">User</option><option value="mod">Mod quản lý nhóm</option></select></label>
       <label>Nhóm<select name="groupId"><option value="">Chưa thuộc nhóm</option><% groups.forEach(g=>{ %><option value="<%=g.id%>"><%=g.name%></option><% }) %></select></label>
@@ -23,20 +23,20 @@
       <label>Chọn file CSV<input name="csvFile" type="file" accept=".csv,text/csv" required></label>
       <button class="primary" type="submit">⇧ Kiểm tra và tạo tài khoản</button>
     </form>
-    <p class="csv-note"><b>Cột bắt buộc:</b> name, email, password. <b>Cột tùy chọn:</b> role, phone, unit, group_name, status. Tên nhóm phải có sẵn trong HUFM.</p>
+    <p class="csv-note"><b>Cột bắt buộc:</b> name, username, password. <b>Cột tùy chọn:</b> role, phone, unit, group_name, status. Tên nhóm phải có sẵn trong HUFM.</p>
   </article>
 </section>
 
 <% if(importResult){ %>
 <section class="panel import-report">
   <div class="section-heading"><div><h2>Kết quả nhập CSV</h2><p>Đã tạo <b><%=importResult.created.length%></b>/<%=importResult.total%> tài khoản; bỏ qua <b><%=importResult.skipped.length%></b> dòng.</p></div></div>
-  <% if(importResult.skipped.length){ %><div class="import-errors"><table><thead><tr><th>Dòng</th><th>Email</th><th>Lý do bỏ qua</th></tr></thead><tbody><% importResult.skipped.forEach(item=>{ %><tr><td><%=item.line%></td><td><%=item.email%></td><td><%=item.reason%></td></tr><% }) %></tbody></table></div><% } %>
+  <% if(importResult.skipped.length){ %><div class="import-errors"><table><thead><tr><th>Dòng</th><th>Tên đăng nhập</th><th>Lý do bỏ qua</th></tr></thead><tbody><% importResult.skipped.forEach(item=>{ %><tr><td><%=item.line%></td><td><%=item.email%></td><td><%=item.reason%></td></tr><% }) %></tbody></table></div><% } %>
 </section>
 <% } %>
 
 <section class="table-wrap responsive-table"><table><thead><tr><th>Thành viên</th><th>Trạng thái</th><th>Vai trò/nhóm</th><th>Thông tin</th><th>Thao tác</th></tr></thead><tbody>
 <% users.forEach(u=>{ const formId='user-update-'+u.id; %><tr>
-<td data-label="Thành viên"><b><%= u.name %></b><br><small><%= u.email %></small></td>
+<td data-label="Thành viên"><b><%= u.name %></b><br><small><%= u.email.endsWith('@hufm.local') ? u.email.slice(0,-11) : u.email %></small></td>
 <td data-label="Trạng thái"><span class="badge <%= u.status %>"><%= u.status %></span></td>
 <td data-label="Vai trò/nhóm"><select name="role" form="<%=formId%>"><option value="user" <%=u.role==='user'?'selected':''%>>user</option><option value="mod" <%=u.role==='mod'?'selected':''%>>mod</option><option value="admin" <%=u.role==='admin'?'selected':''%>>admin</option></select><select name="groupId" form="<%=formId%>"><option value="">Không thuộc nhóm</option><% groups.forEach(g=>{ %><option value="<%=g.id%>" <%=u.groupId===g.id?'selected':''%>><%=g.name%></option><% }) %></select></td>
 <td data-label="Thông tin"><input name="name" form="<%=formId%>" value="<%=u.name%>"><input name="phone" form="<%=formId%>" value="<%=u.phone||''%>" placeholder="Điện thoại"><input name="unit" form="<%=formId%>" value="<%=u.unit||''%>" placeholder="Đơn vị"></td>

@@ -308,3 +308,37 @@
 .vn-national-label b{display:block;font-weight:800}
 .vn-national-label small{display:block;color:#334155;font-size:10px;margin-top:2px}
 @media(max-width:640px){.vn-national-label{font-size:10px;padding:4px 6px}.vn-national-label small{font-size:9px}}
+
+
+/* PWA mobile: nút Công cụ luôn nằm trên bản đồ, không phụ thuộc thanh tiêu đề. */
+.floating-panel-toggle{position:absolute;z-index:820;left:12px;top:92px;display:none;align-items:center;gap:7px;min-height:44px;padding:8px 12px;border:1px solid rgba(11,76,52,.22);border-radius:12px;background:rgba(255,255,255,.96);color:#0b4c34;font-weight:800;box-shadow:0 6px 20px rgba(12,58,40,.2);backdrop-filter:blur(8px)}
+.floating-panel-toggle:active{transform:scale(.96)}
+@media(max-width:700px){
+  .floating-panel-toggle{display:flex;top:94px;left:12px}
+  .map-page .map-head-actions #panelToggle{display:none}
+  .map-page .ifmc-drawer{overflow:hidden!important;display:flex;flex-direction:column}
+  .map-page .ifmc-drawer .drawer-scroll{overflow-y:auto;overflow-x:hidden;min-height:0;flex:1;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding-bottom:calc(20px + env(safe-area-inset-bottom));scrollbar-width:thin}
+  .map-page .ifmc-drawer .drawer-scroll::-webkit-scrollbar{width:5px}.map-page .ifmc-drawer .drawer-scroll::-webkit-scrollbar-thumb{background:#8ca99a;border-radius:999px}
+}
+@media(display-mode:standalone) and (max-width:700px){
+  .floating-panel-toggle{top:12px}
+}
+
+
+/* Confirmation dialog for destructive map-layer actions */
+.confirm-dialog{position:fixed;inset:0;z-index:5000;display:grid;place-items:center;padding:20px}
+.confirm-dialog.hidden{display:none}
+.confirm-dialog-backdrop{position:absolute;inset:0;background:rgba(5,35,25,.58);backdrop-filter:blur(5px);-webkit-backdrop-filter:blur(5px)}
+.confirm-dialog-box{position:relative;width:min(92vw,390px);background:#fff;border-radius:24px;padding:26px 22px 20px;box-shadow:0 24px 70px rgba(0,35,22,.3);text-align:center;animation:confirmPop .2s ease-out}
+.confirm-dialog-icon{width:52px;height:52px;margin:0 auto 13px;border-radius:50%;display:grid;place-items:center;background:#fff0ee;color:#c4352d;font-size:1.6rem;font-weight:900;border:1px solid #ffd2cd}
+.confirm-dialog-box h3{margin:0;color:#173c30;font-size:1.25rem}
+.confirm-dialog-box p{margin:10px 0 12px;color:#5e7069;line-height:1.45;font-size:.94rem}
+.confirm-dialog-name{min-height:0;margin:0 0 18px;padding:10px 12px;border-radius:12px;background:#f3f7f5;color:#173c30;font-weight:750;overflow-wrap:anywhere}
+.confirm-dialog-name:empty{display:none}
+.confirm-dialog-actions{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.confirm-dialog-actions button{min-height:46px;border-radius:13px;font-weight:800}
+.solid-danger{background:#c4352d!important;color:#fff!important;border-color:#c4352d!important}
+.solid-danger:active{transform:scale(.98)}
+body.dialog-open{overflow:hidden}
+@keyframes confirmPop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+@media(max-width:480px){.confirm-dialog{align-items:end;padding:12px 12px calc(12px + env(safe-area-inset-bottom))}.confirm-dialog-box{width:100%;border-radius:22px;padding:24px 18px 18px}.confirm-dialog-actions button{min-height:50px}}

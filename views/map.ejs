@@ -51,6 +51,7 @@
   </aside>
   <div class="map-stage">
     <div id="map" aria-label="Bản đồ quản lý rừng"></div>
+    <button id="floatingPanelToggle" class="floating-panel-toggle" type="button" aria-controls="mapTools" aria-expanded="false">☰ <span>Công cụ</span></button>
     <div class="map-primary-actions" aria-label="Công cụ hiện trường">
       <button id="locateBtn" class="primary active-tool" type="button" title="Định vị và bám theo vị trí">⌖ <span>Định vị</span></button>
       <button id="headingUpBtn" type="button" title="Xoay bản đồ theo hướng điện thoại" aria-pressed="false">➤ <span>Hướng lên</span></button>
@@ -68,6 +69,19 @@
     <div class="live-location-card" id="liveLocationCard" aria-live="polite">
       <b id="liveLocationState">GPS chưa bật</b>
       <span id="liveLocationDetail">Bấm Định vị để theo dõi realtime</span>
+    </div>
+  </div>
+</div>
+<div id="confirmDeleteModal" class="confirm-dialog hidden" role="dialog" aria-modal="true" aria-labelledby="confirmDeleteTitle" aria-describedby="confirmDeleteMessage">
+  <div class="confirm-dialog-backdrop" data-confirm-cancel></div>
+  <div class="confirm-dialog-box">
+    <div class="confirm-dialog-icon" aria-hidden="true">!</div>
+    <h3 id="confirmDeleteTitle">Xóa lớp bản đồ?</h3>
+    <p id="confirmDeleteMessage">Lớp bản đồ sẽ bị xóa khỏi hệ thống và không thể khôi phục.</p>
+    <div class="confirm-dialog-name" id="confirmDeleteLayerName"></div>
+    <div class="confirm-dialog-actions">
+      <button id="confirmDeleteCancel" type="button">Hủy</button>
+      <button id="confirmDeleteAccept" type="button" class="danger solid-danger">Xóa lớp</button>
     </div>
   </div>
 </div>
