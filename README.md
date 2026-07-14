@@ -225,3 +225,29 @@ hoặc giữ cấu hình cũ:
 ADMIN_EMAIL=admin@kiemlamhue.gov.vn
 ADMIN_PASSWORD=mat-khau-manh
 ```
+
+
+## Cập nhật v27 – sửa làm mới thời tiết
+
+- Sửa lỗi GPS dùng sai thuộc tính `lat/lng`; HUFM dùng đúng `latitude/longitude`.
+- Tự khôi phục tọa độ về trung tâm thành phố Huế nếu dữ liệu GPS không hợp lệ.
+- Lưu dự báo gần nhất trên thiết bị và dùng làm dữ liệu dự phòng khi mất mạng/API gián đoạn.
+- Endpoint thời tiết chấp nhận `latitude/longitude` và `lat/lng`, không làm hỏng toàn bộ mô-đun vì một tọa độ lỗi.
+
+## HUFM v28 - Trung tâm nghiệp vụ
+
+Phiên bản này bổ sung: vùng nguy cơ cháy trên bản đồ, cảnh báo theo khu vực phụ trách, phân công tuần tra, SOS hiện trường, bảng trực ban, so sánh hai tracklog, phiếu tuần tra có thể in/lưu PDF, chất lượng GPS và lọc điểm nhảy, cùng nhật ký thay đổi.
+
+### Về nhãn Google
+HUFM không ghép nhãn Google lên bản đồ OpenStreetMap. Google Maps Platform yêu cầu API key/billing và các điều khoản hiển thị, ghi nguồn riêng. Bản mặc định dùng nhãn dựa trên dữ liệu OpenStreetMap (CARTO overlay), không cần Google API. Có thể mở vị trí ra Google Maps bằng liên kết ngoài nếu cần đối chiếu.
+
+### Lưu ý nghiệp vụ
+Vùng nguy cơ cháy là lớp minh họa theo dữ liệu khí tượng Open-Meteo, không thay thế bản tin cảnh báo cháy rừng chính thức. SOS cần thiết bị có GPS và kết nối mạng tại thời điểm gửi.
+
+
+## Lớp Google Satellite Hybrid (v29)
+
+- Bổ sung lớp `Google vệ tinh + nhãn` trong Leaflet, tương tự giao diện IFMC.
+- Không cần nhập API key trong phiên bản này vì sử dụng endpoint tile trực tiếp; nguồn này không phải tích hợp Map Tiles API chính thức và có thể thay đổi hoặc bị giới hạn.
+- Khi Google Hybrid lỗi nhiều tile liên tiếp, HUFM tự chuyển sang Esri World Imagery + nhãn OpenStreetMap để tránh bản đồ trắng.
+- Không tải lớp Google về dùng offline.

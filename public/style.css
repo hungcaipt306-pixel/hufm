@@ -108,7 +108,7 @@
 
 .weather-location-row{display:flex;gap:.45rem;align-items:center;justify-content:space-between;margin-bottom:.6rem;font-size:.82rem}.weather-location-row button{padding:.38rem .55rem}.weather-risk-hero{--risk-color:#607d8b;border-left:6px solid var(--risk-color);background:linear-gradient(135deg,color-mix(in srgb,var(--risk-color) 12%,white),#fff);border-radius:.75rem;padding:.7rem .8rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem}.weather-risk-hero strong{font-size:1.35rem;color:var(--risk-color)}.weather-risk-hero small{display:block}.weather-now{display:grid;grid-template-columns:repeat(2,1fr);gap:.45rem;margin:.6rem 0}.weather-now div{background:#f4f7f3;border-radius:.65rem;padding:.55rem}.weather-now b,.weather-now small{display:block}.weather-now small{font-size:.72rem;color:#5d6d62}.weather-forecast{display:grid;grid-template-columns:repeat(2,1fr);gap:.45rem}.weather-forecast article{--risk-color:#607d8b;border-top:4px solid var(--risk-color);background:#fff;border-radius:.65rem;padding:.5rem;box-shadow:0 1px 5px #0001}.weather-forecast article>*{display:block}.weather-forecast article span,.weather-forecast article small{font-size:.72rem;color:#5d6d62}.weather-forecast article strong{color:var(--risk-color)}.weather-advice{margin:.6rem 0;padding:.65rem;border-radius:.65rem;background:#fff8e1;font-size:.84rem}.weather-advice small{color:#655}.weather-disclaimer{display:block;margin-top:.5rem;color:#5d6d62}.full-button{width:100%}.panel-divider{border:0;border-top:1px solid #dce4dd;margin:.8rem 0}.subpanel-title{margin:.2rem 0 .55rem}@media(max-width:430px){.weather-forecast{grid-template-columns:1fr 1fr}.weather-location-row{align-items:flex-start}.weather-location-row span{max-width:55%}}
 
-/* HUFM: bảng chọn lớp nhỏ gọn ở mép trái, tối ưu cho màn hình điện thoại */
+/* HUFM: bảng chọn lớp nhỏ gọn ở góc dưới bên phải, tối ưu cho màn hình điện thoại */
 .hufm-compact-layer-control.leaflet-control-layers{
   width:auto;
   max-width:min(238px,calc(100vw - 84px));
@@ -181,7 +181,7 @@
 }
 @media(max-width:700px){
   .leaflet-top.leaflet-left{top:2px;left:2px}
-  .hufm-compact-layer-control.leaflet-control-layers{margin-top:4px!important;margin-left:4px!important}
+  .hufm-compact-layer-control.leaflet-control-layers{margin-right:8px!important;margin-bottom:84px!important}
   .hufm-compact-layer-control .leaflet-control-layers-toggle{width:38px!important;height:38px!important;background-size:20px 20px!important}
   .hufm-compact-layer-control .leaflet-control-layers-list{width:188px;max-height:38dvh}
   .hufm-compact-layer-control label{font-size:.74rem!important;padding:4px 3px!important}
@@ -406,8 +406,21 @@ button.primary,.button.primary{background:linear-gradient(135deg,#0d6845,#13865a
 .map-primary-actions{bottom:14px!important;max-width:min(680px,calc(100% - 32px));border-radius:16px!important;padding:6px!important;background:rgba(5,63,42,.92)!important;box-shadow:0 12px 34px rgba(0,0,0,.25)!important}
 .map-primary-actions button{min-height:48px!important;border-radius:11px!important}
 .map-page .live-location-card{left:14px!important;right:auto!important;bottom:82px!important;border:1px solid rgba(255,255,255,.15);border-radius:13px!important;box-shadow:0 8px 22px rgba(0,0,0,.2)}
-.hufm-compact-layer-control.leaflet-control-layers{margin-top:8px!important}
+.hufm-compact-layer-control.leaflet-control-layers{margin-right:12px!important;margin-bottom:86px!important}
 .tools-backdrop{display:none}
+
+
+/* Keep the layer selector above the field-action bar in the bottom-right corner. */
+.leaflet-bottom.leaflet-right .hufm-compact-layer-control{
+  margin-right:12px!important;
+  margin-bottom:86px!important;
+}
+.leaflet-bottom.leaflet-right .hufm-compact-layer-control.leaflet-control-layers-expanded{
+  transform-origin:bottom right;
+}
+@media(min-width:901px){
+  .leaflet-bottom.leaflet-right .hufm-compact-layer-control{margin-bottom:18px!important}
+}
 
 /* Larger screens can collapse the sidebar from the page-head button. */
 @media(min-width:901px){
@@ -449,3 +462,6 @@ button.primary,.button.primary{background:linear-gradient(135deg,#0d6845,#13865a
 }
 
 @media(prefers-reduced-motion:reduce){.map-page .ifmc-drawer,.tools-backdrop,*{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}
+/* HUFM v28 - operational modules */
+.operation-quick-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}.compare-box{display:grid;gap:8px;padding:12px;border:1px solid #d8e4dd;border-radius:14px;background:#f8fbf9}.compare-selects{display:grid;grid-template-columns:1fr 1fr;gap:8px}.ops-grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(300px,.85fr);gap:18px;align-items:start}.ops-grid .panel{margin:0}.stack-form{display:grid;gap:12px}.form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.ops-list,.audit-list{display:grid;gap:10px;margin-top:14px}.ops-card{padding:14px;border:1px solid #d8e4dd;border-radius:14px;background:#fff;box-shadow:0 8px 24px rgba(10,65,45,.06)}.ops-card small{display:block;color:#667c72;margin:4px 0}.ops-card form{display:flex;gap:8px;margin-top:10px}.ops-card form select{flex:1}.sos-open{border-left:5px solid #d32f2f}.sos-acknowledged{border-left:5px solid #f9a825}.sos-resolved{border-left:5px solid #2e7d32}.audit-list>div{padding:10px 0;border-bottom:1px solid #e6eee9}.audit-list small{display:block;color:#71857c}.feature-list{display:grid;gap:8px;padding-left:20px}.gps-excellent{color:#b8f6d1!important}.gps-good{color:#d7f5df!important}.gps-medium{color:#ffe6a7!important}.gps-poor{color:#ffc2bd!important}.solid-danger{background:#b3261e!important;color:#fff!important;border-color:#b3261e!important}
+@media(max-width:900px){.ops-grid{grid-template-columns:1fr}.form-grid,.compare-selects{grid-template-columns:1fr}.operation-quick-grid{grid-template-columns:1fr 1fr}}

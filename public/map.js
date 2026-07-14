@@ -22,17 +22,21 @@ const topoDirectFallback=L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{
   attribution:'Bản đồ địa hình &copy; OpenTopoMap; dữ liệu &copy; OpenStreetMap contributors'
 });
 let usingTopoFallback=false;
-const satelliteLayer=L.tileLayer('/api/base-tiles/satellite/{z}/{x}/{y}.jpg',{
-  ...commonTileOptions,maxZoom:19,attribution:'Ảnh vệ tinh &copy; Esri; dữ liệu nhãn &copy; OpenStreetMap contributors'
+const googleHybridLayer=L.tileLayer('https://mt1.google.com/vt/lyrs=y&x={x}&y={y}&z={z}',{
+  ...commonTileOptions,maxZoom:22,subdomains:[],attribution:'Bản đồ &copy; Google'
+});
+const satelliteFallbackLayer=L.tileLayer('/api/base-tiles/satellite/{z}/{x}/{y}.jpg',{
+  ...commonTileOptions,maxZoom:19,attribution:'Ảnh vệ tinh dự phòng &copy; Esri'
 });
 const labelsLayer=L.tileLayer('/api/base-tiles/labels/{z}/{x}/{y}.png',{
   ...commonTileOptions,maxZoom:19,pane:'overlayPane',attribution:'Nhãn địa danh dựa trên dữ liệu &copy; OpenStreetMap contributors; tiles &copy; CARTO'
 });
 streetLayer.addTo(map);
-let streetTileErrors=0,topoTileErrors=0,satelliteTileErrors=0;
+let streetTileErrors=0,topoTileErrors=0,googleTileErrors=0;
+let usingSatelliteFallback=false;
 function attachTileStatus(layer,label,errorCounter){
   layer.on('loading',()=>showMapLoading(`Đang tải ${label}…`));
-  layer.on('tileload',()=>{if(errorCounter==='street')streetTileErrors=0;if(errorCounter==='topo')topoTileErrors=0;if(errorCounter==='satellite')satelliteTileErrors=0;hideMapLoading();});
+  layer.on('tileload',()=>{if(errorCounter==='street')streetTileErrors=0;if(errorCounter==='topo')topoTileErrors=0;if(errorCounter==='google')googleTileErrors=0;hideMapLoading();});
   layer.on('load',()=>{hideMapLoading();status(`${label} đã sẵn sàng.`);});
   layer.on('tileerror',()=>{
     if(errorCounter==='street')streetTileErrors++;
@@ -45,34 +49,53 @@ function attachTileStatus(layer,label,errorCounter){
         status('Nguồn địa hình qua máy chủ chưa phản hồi. Đang chuyển sang nguồn OpenTopoMap dự phòng…');
       }
     }
-    if(errorCounter==='satellite')satelliteTileErrors++;
+    if(errorCounter==='google'){
+      googleTileErrors++;
+      if(googleTileErrors>=4 && map.hasLayer(googleHybridLayer) && !usingSatelliteFallback){
+        usingSatelliteFallback=true;
+        map.removeLayer(googleHybridLayer);
+        satelliteFallbackLayer.addTo(map);
+        if(!map.hasLayer(labelsLayer)) labelsLayer.addTo(map);
+        status('Nguồn Google Hybrid chưa phản hồi. Đang chuyển sang vệ tinh dự phòng kèm nhãn OpenStreetMap…');
+      }
+    }
   });
 }
 attachTileStatus(streetLayer,'bản đồ đường phố','street');
 attachTileStatus(topoLayer,'bản đồ địa hình','topo');
 attachTileStatus(topoDirectFallback,'bản đồ địa hình dự phòng','topoFallback');
-attachTileStatus(satelliteLayer,'bản đồ vệ tinh','satellite');
+attachTileStatus(googleHybridLayer,'Google Satellite Hybrid','google');
+attachTileStatus(satelliteFallbackLayer,'bản đồ vệ tinh dự phòng','satelliteFallback');
 setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-tile-loaded'))hideMapLoading();},900);
 
 const waypointLayer = L.layerGroup().addTo(map);
 const trackLayer = L.layerGroup().addTo(map);
 const fireAlertLayer = L.layerGroup().addTo(map);
+const fireRiskZoneLayer = L.layerGroup().addTo(map);
 const vietnamNationalLayer = L.layerGroup().addTo(map);
 const uploadedLayers = new Map();
 const baseLayers={
   'Đường phố (OpenStreetMap)':streetLayer,
   'Địa hình & bình độ':topoLayer,
-  'Vệ tinh + nhãn OSM':satelliteLayer
+  'Google vệ tinh + nhãn':googleHybridLayer,
+  'Vệ tinh dự phòng + nhãn OSM':satelliteFallbackLayer
 };
-const overlayLayers={Waypoint:waypointLayer,Tracklog:trackLayer,'Cảnh báo cháy rừng':fireAlertLayer,'Bản đồ Việt Nam (Hoàng Sa, Trường Sa)':vietnamNationalLayer,'Nhãn OpenStreetMap':labelsLayer};
+const overlayLayers={Waypoint:waypointLayer,Tracklog:trackLayer,'Cảnh báo cháy rừng':fireAlertLayer,'Vùng nguy cơ cháy':fireRiskZoneLayer,'Bản đồ Việt Nam (Hoàng Sa, Trường Sa)':vietnamNationalLayer,'Nhãn chuẩn OpenStreetMap':labelsLayer};
 const layerControl = L.control.layers(
   baseLayers,
   overlayLayers,
-  { collapsed: true, position: 'topleft' }
+  { collapsed: true, position: 'bottomright' }
 ).addTo(map);
 map.on('baselayerchange',event=>{
-  if(event.layer===satelliteLayer&&!map.hasLayer(labelsLayer))labelsLayer.addTo(map);
-  if(event.layer!==satelliteLayer&&map.hasLayer(labelsLayer))map.removeLayer(labelsLayer);
+  if(event.layer===googleHybridLayer){
+    usingSatelliteFallback=false;
+    googleTileErrors=0;
+    if(map.hasLayer(labelsLayer))map.removeLayer(labelsLayer);
+  } else if(event.layer===satelliteFallbackLayer){
+    if(!map.hasLayer(labelsLayer))labelsLayer.addTo(map);
+  } else if(map.hasLayer(labelsLayer)){
+    map.removeLayer(labelsLayer);
+  }
   if(event.layer===topoLayer){
     usingTopoFallback=false;
     topoTileErrors=0;
@@ -121,7 +144,7 @@ function showVietnamOverview() {
 }
 window.showVietnamOverview = showVietnamOverview;
 
-// Bảng lớp thu gọn ở mép trái: chạm để mở danh sách có thanh cuộn.
+// Bảng lớp thu gọn ở góc dưới bên phải: chạm để mở danh sách có thanh cuộn.
 const layerControlEl = layerControl.getContainer();
 layerControlEl.classList.add('hufm-compact-layer-control');
 const layerToggleEl = layerControlEl.querySelector('.leaflet-control-layers-toggle');
@@ -238,9 +261,11 @@ async function loadData() {
     }
     const actions = t.offline
       ? '<span class="offline-badge">Chờ đồng bộ</span>'
-      : `<button type="button" data-data-action="edit" data-data-type="track" data-data-id="${esc(t.id)}">Chỉnh sửa</button><a class="mini-link" href="/api/tracks/${t.id}/export/geojson">GeoJSON + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/gpx">GPX + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/kml">KML + WP</a><button type="button" class="danger" data-data-action="delete" data-data-type="track" data-data-id="${esc(t.id)}">Xóa</button>`;
+      : `<button type="button" data-data-action="edit" data-data-type="track" data-data-id="${esc(t.id)}">Chỉnh sửa</button><a class="mini-link" href="/api/tracks/${t.id}/export/geojson">GeoJSON + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/gpx">GPX + WP</a><a class="mini-link" href="/api/tracks/${t.id}/export/kml">KML + WP</a><a class="mini-link" href="/reports/track/${t.id}">Phiếu tuần tra</a><button type="button" class="danger" data-data-action="delete" data-data-type="track" data-data-id="${esc(t.id)}">Xóa</button>`;
     list.insertAdjacentHTML('beforeend', `<div class="data-item" data-record-key="track:${esc(t.id)}"><div class="data-item-title"><span class="track-dot"></span><b>${esc(t.name)}</b></div><small>${Math.round(t.distanceMeters || 0)} m • ${(t.points || []).length} điểm</small><div class="data-actions"><button type="button" data-data-action="view" data-data-type="track" data-data-id="${esc(t.id)}">Xem</button>${actions}</div></div>`);
   });
+  const c1=document.getElementById('compareTrack1'),c2=document.getElementById('compareTrack2');
+  if(c1&&c2){const old1=c1.value,old2=c2.value;const options='<option value="">Chọn tracklog</option>'+data.tracks.filter(t=>!t.offline).map(t=>`<option value="${esc(t.id)}">${esc(t.name)}</option>`).join('');c1.innerHTML=options;c2.innerHTML=options;c1.value=old1;c2.value=old2;}
   if (!data.waypoints.length && !data.tracks.length) list.innerHTML = '<div class="layer-empty">Chưa có waypoint hoặc tracklog.</div>';
   if (bounds.length && !currentPosition) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 16 });
 }
@@ -544,7 +569,7 @@ function updateLiveLocationCard(position) {
   if (!state || !detail) return;
   const headingText = Number.isFinite(currentHeading) ? ` • hướng ${Math.round(currentHeading)}°` : '';
   state.textContent = isTracking ? 'Đang ghi tracklog realtime' : 'Định vị realtime đang bật';
-  detail.textContent = `±${Math.round(position.accuracy || 0)} m${headingText} • ${new Date().toLocaleTimeString('vi-VN')}`;
+  const quality=gpsQuality(Number(position.accuracy)); detail.textContent = `GPS ${quality.label} • ±${Math.round(position.accuracy || 0)} m${headingText} • ${new Date().toLocaleTimeString('vi-VN')}`; detail.className=quality.className;
 }
 function markerIcon(heading = 0) {
   return L.divIcon({
@@ -569,8 +594,12 @@ function redrawHeading() {
   applyMapBearing();
   if (currentPosition) updateLiveLocationCard(currentPosition);
 }
+let lastGoodPosition=null;
+function gpsQuality(accuracy){if(!Number.isFinite(accuracy))return {label:'Không rõ',className:'gps-unknown'};if(accuracy<=10)return {label:'Rất tốt',className:'gps-excellent'};if(accuracy<=25)return {label:'Tốt',className:'gps-good'};if(accuracy<=50)return {label:'Trung bình',className:'gps-medium'};return {label:'Yếu',className:'gps-poor'};}
 function updateRealtimePosition(p) {
   const c = p.coords;
+  if(lastGoodPosition){const jump=map.distance([lastGoodPosition.latitude,lastGoodPosition.longitude],[c.latitude,c.longitude]);const elapsed=Math.max(1,(p.timestamp-lastGoodPosition.timestamp)/1000);if(jump>500&&elapsed<10&&(!Number.isFinite(c.accuracy)||c.accuracy>40)){status('Đã bỏ qua một điểm GPS nhảy bất thường.');return;}}
+  lastGoodPosition={latitude:c.latitude,longitude:c.longitude,timestamp:p.timestamp||Date.now()};
   currentPosition = { latitude:c.latitude, longitude:c.longitude, accuracy:c.accuracy, altitude:c.altitude, speed:c.speed, heading:c.heading, time:new Date(p.timestamp || Date.now()).toISOString() };
   if (Number.isFinite(c.heading) && c.heading >= 0 && (c.speed == null || c.speed > .4)) {
     lastGpsHeading = c.heading; currentHeading = c.heading;
@@ -688,12 +717,13 @@ document.getElementById('updateAppBtn').onclick=async()=>{
   btn.disabled=true;btn.classList.add('is-spinning');status('Đang cập nhật dữ liệu và bản đồ...');showMapLoading('Đang cập nhật bản đồ…');
   try{
     await Promise.allSettled([loadData(),loadLayers(),loadFireWeather(false),loadFireAlerts()]);
-    streetTileErrors=0;topoTileErrors=0;satelliteTileErrors=0;
-    if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer)&&!map.hasLayer(satelliteLayer))streetLayer.addTo(map);
+    streetTileErrors=0;topoTileErrors=0;googleTileErrors=0;
+    if(!map.hasLayer(streetLayer)&&!map.hasLayer(topoLayer)&&!map.hasLayer(googleHybridLayer)&&!map.hasLayer(satelliteFallbackLayer))streetLayer.addTo(map);
     if(map.hasLayer(streetLayer))streetLayer.redraw();
     if(map.hasLayer(topoLayer))topoLayer.redraw();
     if(map.hasLayer(topoDirectFallback))topoDirectFallback.redraw();
-    if(map.hasLayer(satelliteLayer))satelliteLayer.redraw();
+    if(map.hasLayer(googleHybridLayer))googleHybridLayer.redraw();
+    if(map.hasLayer(satelliteFallbackLayer))satelliteFallbackLayer.redraw();
     if(map.hasLayer(labelsLayer))labelsLayer.redraw();
     map.invalidateSize(true);
     if('serviceWorker' in navigator){
@@ -725,7 +755,20 @@ Promise.all([loadData(), loadLayers()]).catch(e => status(e.message));
 
 
 
-let weatherCoords = { latitude:16.4637, longitude:107.5909 };
+const DEFAULT_WEATHER_COORDS = { latitude:16.4637, longitude:107.5909 };
+let weatherCoords = { ...DEFAULT_WEATHER_COORDS };
+const WEATHER_STORAGE_KEY = 'hufm:last-fire-weather';
+function validWeatherCoords(coords){
+  const latitude=Number(coords?.latitude), longitude=Number(coords?.longitude);
+  return Number.isFinite(latitude)&&Number.isFinite(longitude)&&Math.abs(latitude)<=90&&Math.abs(longitude)<=180;
+}
+function resetWeatherCoords(){
+  weatherCoords={...DEFAULT_WEATHER_COORDS};
+  const label=document.getElementById('weatherLocation');
+  if(label) label.textContent='Trung tâm thành phố Huế';
+}
+function saveWeatherSnapshot(data){try{localStorage.setItem(WEATHER_STORAGE_KEY,JSON.stringify({savedAt:Date.now(),data}));}catch{}}
+function loadWeatherSnapshot(){try{return JSON.parse(localStorage.getItem(WEATHER_STORAGE_KEY)||'null');}catch{return null;}}
 function fmtNumber(value, digits=0){const n=Number(value);return Number.isFinite(n)?n.toLocaleString('vi-VN',{maximumFractionDigits:digits}):'—'}
 function riskAction(level){
   if(level>=5)return 'Tạm dừng hoạt động dùng lửa; bố trí trực, phương tiện và kiểm tra điểm nóng liên tục.';
@@ -738,20 +781,37 @@ async function loadFireWeather(useGps=false){
   const hero=document.getElementById('weatherRiskHero'), now=document.getElementById('weatherNow'), forecast=document.getElementById('weatherForecast'), advice=document.getElementById('weatherAdvice');
   if(useGps){
     if(!currentPosition){status('Chưa có vị trí GPS. Hãy bấm Định vị trước.');return;}
-    weatherCoords={latitude:currentPosition.lat,longitude:currentPosition.lng};
+    weatherCoords={latitude:Number(currentPosition.latitude),longitude:Number(currentPosition.longitude)};
     document.getElementById('weatherLocation').textContent=`Vị trí hiện tại ${weatherCoords.latitude.toFixed(4)}, ${weatherCoords.longitude.toFixed(4)}`;
   }
+  if(!validWeatherCoords(weatherCoords)){
+    resetWeatherCoords();
+    status('Tọa độ thời tiết đã được tự khôi phục về trung tâm thành phố Huế.');
+  }
   hero.innerHTML='<b>Đang phân tích thời tiết và nguy cơ…</b>';
-  try{
-    const data=await api(`/api/fire-weather?latitude=${weatherCoords.latitude}&longitude=${weatherCoords.longitude}`);
+  const renderWeather=(data,{stale=false}={})=>{
     const today=data.forecast?.[0], current=data.current||{};
     if(!today)throw new Error('Nguồn thời tiết chưa có dữ liệu dự báo.');
-    hero.style.setProperty('--risk-color',today.risk.color); hero.innerHTML=`<span class="risk-level">${esc(today.risk.label)}</span><strong>${today.risk.score}/100</strong>`;
+    hero.style.setProperty('--risk-color',today.risk.color); hero.innerHTML=`<span class="risk-level">${esc(today.risk.label)}</span><strong>${today.risk.score}/100</strong>${stale?'<small>Dữ liệu gần nhất</small>':''}`;
+    fireRiskZoneLayer.clearLayers(); const radius=[0,2500,5000,8500,12000,16000][Math.max(1,Math.min(5,today.risk.level))]; L.circle([data.latitude,data.longitude],{radius,color:today.risk.color,weight:2,fillColor:today.risk.color,fillOpacity:.12,dashArray:'8 5'}).bindPopup(`<b>${esc(today.risk.label)}</b><br>Điểm nguy cơ ${today.risk.score}/100<br><small>Vùng minh họa từ dữ liệu thời tiết, không phải ranh giới cảnh báo chính thức.</small>`).addTo(fireRiskZoneLayer);
     now.innerHTML=`<div><b>${fmtNumber(current.temperature_2m,1)}°C</b><small>Nhiệt độ</small></div><div><b>${fmtNumber(current.relative_humidity_2m)}%</b><small>Độ ẩm</small></div><div><b>${fmtNumber(current.wind_speed_10m,1)} km/h</b><small>Gió</small></div><div><b>${fmtNumber(data.recentRain24h,1)} mm</b><small>Mưa 24 giờ</small></div>`;
     forecast.innerHTML=(data.forecast||[]).slice(0,4).map((d,i)=>`<article style="--risk-color:${d.risk.color}"><b>${i===0?'Hôm nay':new Date(d.date+'T00:00:00').toLocaleDateString('vi-VN',{weekday:'short'})}</b><span>${esc(d.weatherText)}</span><strong>${d.risk.level}/5</strong><small>${fmtNumber(d.maxTemp)}° • RH ${fmtNumber(d.minHumidity)}% • mưa ${fmtNumber(d.rainSum,1)}mm</small></article>`).join('');
-    advice.innerHTML=`<b>Khuyến nghị:</b> ${esc(riskAction(today.risk.level))}<br><small>Yếu tố chính: ${esc(today.risk.reasons.join(', '))}. Cập nhật ${new Date(data.fetchedAt).toLocaleString('vi-VN')} • ${esc(data.source)}${data.cached?' • cache':''}</small>`;
-    document.getElementById('weatherDisclaimer').textContent=data.disclaimer;
-  }catch(e){hero.innerHTML=`<b>Không tải được thời tiết</b><small>${esc(e.message)}</small>`;now.innerHTML='';forecast.innerHTML='';advice.textContent='Dữ liệu cũ trên bản đồ vẫn có thể tiếp tục sử dụng khi offline.';}
+    advice.innerHTML=`<b>Khuyến nghị:</b> ${esc(riskAction(today.risk.level))}<br><small>Yếu tố chính: ${esc(today.risk.reasons.join(', '))}. Cập nhật ${new Date(data.fetchedAt).toLocaleString('vi-VN')} • ${esc(data.source)}${data.cached?' • cache':''}${stale?' • bản lưu trên thiết bị':''}</small>`;
+    document.getElementById('weatherDisclaimer').textContent=data.disclaimer||'Chỉ số hỗ trợ nghiệp vụ, không thay thế cấp dự báo chính thức.';
+  };
+  try{
+    const query=new URLSearchParams({latitude:String(weatherCoords.latitude),longitude:String(weatherCoords.longitude)});
+    const data=await api(`/api/fire-weather?${query.toString()}`);
+    renderWeather(data); saveWeatherSnapshot(data);
+  }catch(e){
+    const snapshot=loadWeatherSnapshot();
+    if(snapshot?.data){
+      renderWeather(snapshot.data,{stale:true});
+      status(`Không tải được dữ liệu mới: ${e.message}. Đang dùng dự báo gần nhất.`);
+    }else{
+      hero.innerHTML=`<b>Không tải được thời tiết</b><small>${esc(e.message)}</small>`;now.innerHTML='';forecast.innerHTML='';advice.innerHTML='Kiểm tra Internet rồi bấm <b>Làm mới thời tiết & nguy cơ</b>. Dữ liệu bản đồ và dữ liệu hiện trường vẫn hoạt động độc lập.';
+    }
+  }
 }
 document.getElementById('refreshWeatherBtn').addEventListener('click',()=>loadFireWeather(false));
 document.getElementById('weatherHereBtn').addEventListener('click',()=>loadFireWeather(true));
@@ -825,6 +885,21 @@ document.getElementById('downloadOfflineBtn').onclick=async()=>{const box=docume
 document.getElementById('clearOfflineBtn').onclick=async()=>{if(!confirm('Xóa toàn bộ tile bản đồ đã tải offline?'))return;const reg=await navigator.serviceWorker.ready;reg.active.postMessage({type:'CLEAR_TILES'});};
 navigator.serviceWorker?.addEventListener('message',e=>{const d=e.data||{},box=document.getElementById('offlineStatus');if(d.type==='CACHE_PROGRESS')box.textContent=`Đã tải ${d.done}/${d.total} tile (${d.failed} lỗi)`;if(d.type==='CACHE_DONE')box.textContent=`Hoàn tất: ${d.done-d.failed}/${d.total} tile sẵn sàng offline.`;if(d.type==='TILES_CLEARED')box.textContent='Đã xóa bản đồ offline.';});
 (async()=>{try{appConfig=await api('/api/app-config');}catch(_){ }await updateNetworkUI();if(navigator.onLine)syncPending();})();
+
+
+
+// Nghiệp vụ hiện trường: SOS, nhiệm vụ, trực ban và so sánh tracklog.
+const comparisonLayer=L.layerGroup().addTo(map);
+async function loadAssignments(){
+  const box=document.getElementById('assignmentSummary'); if(!box)return;
+  try{const rows=await api('/api/assignments');box.innerHTML=rows.length?`<b>${rows.length} nhiệm vụ</b><br>${rows.slice(0,3).map(x=>`${esc(x.title)} • ${esc(x.status)}`).join('<br>')}`:'Chưa có nhiệm vụ được giao.';
+    rows.forEach(a=>{if(a.geometry)L.geoJSON(a.geometry,{style:{color:'#7b1fa2',weight:3,dashArray:'8 5',fillOpacity:.06}}).bindPopup(`<b>Nhiệm vụ: ${esc(a.title)}</b><br>${esc(a.description||'')}<br>Trạng thái: ${esc(a.status)}`).addTo(comparisonLayer);});
+  }catch(e){box.textContent='Không tải được nhiệm vụ: '+e.message;}
+}
+document.getElementById('sosBtn')?.addEventListener('click',async()=>{if(!currentPosition){status('Hãy bật Định vị trước khi gửi SOS.');return;}if(!confirm('Gửi SOS kèm vị trí hiện tại đến quản trị và nhóm?'))return;try{const out=await api('/api/sos',{method:'POST',body:JSON.stringify({latitude:currentPosition.latitude,longitude:currentPosition.longitude,accuracy:currentPosition.accuracy,message:'Yêu cầu hỗ trợ khẩn cấp từ hiện trường'})});showToast(out.message||'Đã gửi SOS.');}catch(e){showToast(e.message||'Không gửi được SOS.');}});
+document.getElementById('compareTracksBtn')?.addEventListener('click',async()=>{const id1=document.getElementById('compareTrack1').value,id2=document.getElementById('compareTrack2').value,box=document.getElementById('compareResult');if(!id1||!id2||id1===id2){box.textContent='Hãy chọn hai tracklog khác nhau.';return;}try{const out=await api(`/api/tracks/compare?id1=${encodeURIComponent(id1)}&id2=${encodeURIComponent(id2)}`);comparisonLayer.clearLayers();const styles=[{color:'#1565c0',weight:5},{color:'#e65100',weight:5,dashArray:'8 5'}];out.tracks.forEach((t,i)=>L.polyline((t.points||[]).map(p=>[p.lat,p.lng]),styles[i]).bindPopup(`<b>${esc(t.name)}</b><br>${Math.round(t.distanceMeters||0)} m`).addTo(comparisonLayer));const all=out.tracks.flatMap(t=>(t.points||[]).map(p=>[p.lat,p.lng]));if(all.length)map.fitBounds(all,{padding:[30,30]});box.textContent=`Chênh lệch quãng đường: ${Math.round(out.distanceDifference||0)} m.`;}catch(e){box.textContent=e.message;}});
+setInterval(()=>{if(!navigator.onLine)return;fetch('/api/presence',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({latitude:currentPosition?.latitude,longitude:currentPosition?.longitude,tracking:isTracking})}).catch(()=>{});},60000);
+loadAssignments();
 
 setTimeout(() => map.invalidateSize(true), 350);
 

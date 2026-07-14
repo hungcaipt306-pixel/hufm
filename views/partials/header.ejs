@@ -32,7 +32,7 @@
       <button class="menu-toggle" id="menuToggle" type="button" aria-label="Mở menu" aria-expanded="false" aria-controls="mainNav"><span></span><span></span><span></span></button>
       <nav id="mainNav" class="main-nav">
         <a href="/dashboard">⌂ Tổng quan</a>
-        <a href="/map">🗺 Bản đồ</a>
+        <a href="/map">🗺 Bản đồ</a><a href="/operations">🛡 Nghiệp vụ</a>
         <% if(currentUser.role==='admin'){ %><a href="/admin/users">👥 Tài khoản</a><a href="/admin/groups">▦ Nhóm</a><% } %>
         <% if(currentUser.role==='mod'){ %><a href="/group/members">👥 Thành viên</a><% } %>
         <form method="post" action="/logout"><button class="link-btn">↪ Đăng xuất</button></form>

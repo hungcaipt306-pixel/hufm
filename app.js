@@ -198,6 +198,33 @@ const MapLayer = sequelize.define('MapLayer', {
   metadata: DataTypes.JSON
 });
 
+const PatrolAssignment = sequelize.define('PatrolAssignment', {
+  title: { type: DataTypes.STRING, allowNull: false },
+  description: DataTypes.TEXT,
+  geometry: { type: DataTypes.JSON, allowNull: false },
+  riskThreshold: { type: DataTypes.INTEGER, defaultValue: 4 },
+  status: { type: DataTypes.ENUM('assigned','in_progress','completed','cancelled'), defaultValue: 'assigned' },
+  dueAt: DataTypes.DATE
+});
+
+const SOSAlert = sequelize.define('SOSAlert', {
+  message: DataTypes.TEXT,
+  latitude: { type: DataTypes.DOUBLE, allowNull: false },
+  longitude: { type: DataTypes.DOUBLE, allowNull: false },
+  accuracy: DataTypes.DOUBLE,
+  status: { type: DataTypes.ENUM('open','acknowledged','resolved'), defaultValue: 'open' },
+  resolvedAt: DataTypes.DATE
+});
+
+const AuditLog = sequelize.define('AuditLog', {
+  action: { type: DataTypes.STRING, allowNull: false },
+  entityType: { type: DataTypes.STRING, allowNull: false },
+  entityId: DataTypes.STRING,
+  beforeData: DataTypes.JSON,
+  afterData: DataTypes.JSON
+});
+
+
 Group.hasMany(User, { foreignKey: 'groupId' });
 User.belongsTo(Group, { foreignKey: 'groupId' });
 User.hasMany(Waypoint, { foreignKey: 'userId', onDelete: 'CASCADE' });
@@ -212,6 +239,19 @@ User.hasMany(MapLayer, { foreignKey: 'userId', onDelete: 'CASCADE' });
 MapLayer.belongsTo(User, { foreignKey: 'userId' });
 Group.hasMany(MapLayer, { foreignKey: 'groupId' });
 MapLayer.belongsTo(Group, { foreignKey: 'groupId' });
+User.hasMany(PatrolAssignment, { foreignKey:'assigneeId' });
+PatrolAssignment.belongsTo(User, { as:'Assignee', foreignKey:'assigneeId' });
+Group.hasMany(PatrolAssignment, { foreignKey:'groupId' });
+PatrolAssignment.belongsTo(Group, { foreignKey:'groupId' });
+User.hasMany(PatrolAssignment, { as:'CreatedAssignments', foreignKey:'createdById' });
+PatrolAssignment.belongsTo(User, { as:'Creator', foreignKey:'createdById' });
+User.hasMany(SOSAlert, { foreignKey:'userId' });
+SOSAlert.belongsTo(User, { foreignKey:'userId' });
+Group.hasMany(SOSAlert, { foreignKey:'groupId' });
+SOSAlert.belongsTo(Group, { foreignKey:'groupId' });
+User.hasMany(AuditLog, { foreignKey:'userId' });
+AuditLog.belongsTo(User, { foreignKey:'userId' });
+
 
 app.set('view engine', 'ejs');
 app.set('views', path.join(__dirname, 'views'));
@@ -644,6 +684,18 @@ app.post('/logout', (req, res) => req.session.destroy(() => {
   res.redirect('/login');
 }));
 
+
+const livePresence = new Map();
+async function writeAudit(req, action, entityType, entityId, beforeData=null, afterData=null) {
+  try { await AuditLog.create({ action, entityType, entityId:String(entityId||''), beforeData, afterData, userId:req.session.user?.id || null }); }
+  catch (error) { console.warn('Không ghi được nhật ký:', error.message); }
+}
+function operationScope(user) {
+  if (user.role === 'admin') return {};
+  if (user.role === 'mod') return { groupId:user.groupId };
+  return { [Op.or]:[{assigneeId:user.id},{groupId:user.groupId || -1}] };
+}
+
 app.get('/dashboard', requireAuth, async (req, res) => {
   const scope = dataScope(req.session.user);
   const [waypointCount, trackCount, userCount, pendingCount] = await Promise.all([
@@ -653,6 +705,30 @@ app.get('/dashboard', requireAuth, async (req, res) => {
   ]);
   res.render('dashboard', { stats: { waypointCount, trackCount, userCount, pendingCount } });
 });
+
+
+app.get('/operations', requireAuth, async (req,res) => {
+  const where=operationScope(req.session.user);
+  const [assignments,alerts,groups,users,logs]=await Promise.all([
+    PatrolAssignment.findAll({where,include:[{model:User,as:'Assignee',attributes:['id','name','email']},{model:Group,attributes:['id','name']}],order:[['createdAt','DESC']],limit:100}),
+    SOSAlert.findAll({where:req.session.user.role==='admin'?{}:req.session.user.role==='mod'?{groupId:req.session.user.groupId}:{userId:req.session.user.id},include:[{model:User,attributes:['id','name']}],order:[['createdAt','DESC']],limit:100}),
+    req.session.user.role==='admin'?Group.findAll({order:[['name','ASC']]}):Group.findAll({where:{id:req.session.user.groupId||-1}}),
+    ['admin','mod'].includes(req.session.user.role)?User.findAll({where:req.session.user.role==='admin'?{status:'approved'}:{groupId:req.session.user.groupId,status:'approved'},order:[['name','ASC']]}):[],
+    AuditLog.findAll({include:[{model:User,attributes:['id','name']}],order:[['createdAt','DESC']],limit:50})
+  ]);
+  const cutoff=Date.now()-5*60*1000; const presence=[...livePresence.values()].filter(x=>x.updatedAt>=cutoff).filter(x=>req.session.user.role==='admin'||x.user.groupId===req.session.user.groupId||x.user.id===req.session.user.id); res.render('operations',{assignments,alerts,groups,users,logs,presence});
+});
+app.post('/api/presence', requireAuth, (req,res)=>{ livePresence.set(req.session.user.id,{user:req.session.user,latitude:Number(req.body.latitude)||null,longitude:Number(req.body.longitude)||null,tracking:!!req.body.tracking,updatedAt:Date.now()}); res.json({ok:true}); });
+app.get('/api/operations/presence', requireAuth, (req,res)=>{ const cutoff=Date.now()-5*60*1000; const rows=[...livePresence.values()].filter(x=>x.updatedAt>=cutoff).filter(x=>req.session.user.role==='admin'||x.user.groupId===req.session.user.groupId||x.user.id===req.session.user.id); res.json(rows); });
+app.get('/api/assignments', requireAuth, async (req,res)=>{ const rows=await PatrolAssignment.findAll({where:operationScope(req.session.user),include:[{model:User,as:'Assignee',attributes:['id','name']},{model:Group,attributes:['id','name']}],order:[['createdAt','DESC']]}); res.json(rows); });
+app.post('/operations/assignments', requireRole('admin','mod'), async (req,res)=>{
+  try{ const n=Number(req.body.north),s=Number(req.body.south),e=Number(req.body.east),w=Number(req.body.west); if(![n,s,e,w].every(Number.isFinite)) throw new Error('Phạm vi giao nhiệm vụ không hợp lệ.'); const geometry={type:'Polygon',coordinates:[[[w,s],[e,s],[e,n],[w,n],[w,s]]]}; const row=await PatrolAssignment.create({title:req.body.title||'Nhiệm vụ tuần tra',description:req.body.description||'',geometry,riskThreshold:Number(req.body.riskThreshold)||4,status:'assigned',dueAt:req.body.dueAt||null,assigneeId:req.body.assigneeId?Number(req.body.assigneeId):null,groupId:req.session.user.role==='mod'?req.session.user.groupId:(req.body.groupId?Number(req.body.groupId):null),createdById:req.session.user.id}); await writeAudit(req,'create','assignment',row.id,null,row.toJSON()); flash(req,'success','Đã giao nhiệm vụ tuần tra.'); }catch(error){flash(req,'error',error.message);} res.redirect('/operations');
+});
+app.post('/operations/assignments/:id/status', requireAuth, async (req,res)=>{ const row=await PatrolAssignment.findByPk(req.params.id); if(!row) return res.redirect('/operations'); if(req.session.user.role!=='admin'&&row.groupId!==req.session.user.groupId&&row.assigneeId!==req.session.user.id) return res.status(403).render('error',{message:'Không có quyền.'}); const before=row.toJSON(); const status=['assigned','in_progress','completed','cancelled'].includes(req.body.status)?req.body.status:row.status; await row.update({status}); await writeAudit(req,'update','assignment',row.id,before,row.toJSON()); flash(req,'success','Đã cập nhật nhiệm vụ.'); res.redirect('/operations'); });
+app.post('/api/sos', requireAuth, async (req,res)=>{ const latitude=Number(req.body.latitude),longitude=Number(req.body.longitude); if(!Number.isFinite(latitude)||!Number.isFinite(longitude)) return res.status(400).json({error:'Chưa có tọa độ GPS hợp lệ.'}); const row=await SOSAlert.create({message:req.body.message||'Yêu cầu hỗ trợ khẩn cấp',latitude,longitude,accuracy:Number(req.body.accuracy)||null,userId:req.session.user.id,groupId:req.session.user.groupId||null}); await writeAudit(req,'create','sos',row.id,null,row.toJSON()); res.json({ok:true,message:'Đã gửi SOS đến quản trị và nhóm.',alert:row}); });
+app.post('/operations/sos/:id/status', requireRole('admin','mod'), async (req,res)=>{ const row=await SOSAlert.findByPk(req.params.id); if(!row) return res.redirect('/operations'); if(req.session.user.role==='mod'&&row.groupId!==req.session.user.groupId) return res.status(403).render('error',{message:'Không có quyền.'}); const before=row.toJSON(); const status=['open','acknowledged','resolved'].includes(req.body.status)?req.body.status:row.status; await row.update({status,resolvedAt:status==='resolved'?new Date():null}); await writeAudit(req,'update','sos',row.id,before,row.toJSON()); flash(req,'success','Đã cập nhật cảnh báo SOS.'); res.redirect('/operations'); });
+app.get('/api/tracks/compare', requireAuth, async (req,res)=>{ const ids=[Number(req.query.id1),Number(req.query.id2)]; if(ids.some(x=>!Number.isFinite(x))) return res.status(400).json({error:'Chọn đủ hai tracklog.'}); const rows=await Tracklog.findAll({where:{id:{[Op.in]:ids},...dataScope(req.session.user)}}); if(rows.length!==2) return res.status(404).json({error:'Không tìm thấy đủ hai tracklog.'}); const bbox=t=>{const lats=t.points.map(p=>p.lat),lngs=t.points.map(p=>p.lng);return {south:Math.min(...lats),north:Math.max(...lats),west:Math.min(...lngs),east:Math.max(...lngs)}}; res.json({tracks:rows,bounds:rows.map(bbox),distanceDifference:Math.abs((rows[0].distanceMeters||0)-(rows[1].distanceMeters||0))}); });
+app.get('/reports/track/:id', requireAuth, async (req,res)=>{ const track=await Tracklog.findByPk(req.params.id,{include:[{model:User,attributes:['name','unit']},{model:Group,attributes:['name']}]}); if(!track||!canAccessRecord(req.session.user,track)) return res.status(404).render('error',{message:'Không tìm thấy tracklog.'}); const waypoints=await Waypoint.findAll({where:dataScope(req.session.user),order:[['createdAt','ASC']]}); res.render('track-report',{track,waypoints}); });
 
 app.get('/map', requireAuth, (req, res) => res.render('map'));
 
@@ -705,9 +781,16 @@ app.get('/api/admin-units/hue', requireAuth, async (req, res) => {
 
 
 app.get('/api/fire-weather', requireAuth, async (req, res) => {
-  const latitude = Number(req.query.latitude || 16.4637);
-  const longitude = Number(req.query.longitude || 107.5909);
-  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return res.status(400).json({ error: 'Tọa độ thời tiết không hợp lệ.' });
+  const rawLatitude = req.query.latitude ?? req.query.lat;
+  const rawLongitude = req.query.longitude ?? req.query.lng ?? req.query.lon;
+  let latitude = Number(rawLatitude);
+  let longitude = Number(rawLongitude);
+  let coordinateFallback = false;
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) {
+    latitude = 16.4637;
+    longitude = 107.5909;
+    coordinateFallback = true;
+  }
   const roundedLat = latitude.toFixed(3), roundedLng = longitude.toFixed(3);
   const cacheKey = `${roundedLat},${roundedLng}`;
   const cached = weatherCache.get(cacheKey);
@@ -720,7 +803,7 @@ app.get('/api/fire-weather', requireAuth, async (req, res) => {
     url.searchParams.set('hourly', 'temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_gusts_10m');
     const payload = await fetchJsonWithTimeout(url.toString(), { headers: { Accept: 'application/json', 'User-Agent': 'HUFM/1.1' } }, 18000);
     const parsed = parseOpenMeteo(payload);
-    const value = { source:'Open-Meteo', latitude, longitude, timezone:payload.timezone, fetchedAt:new Date().toISOString(), disclaimer:'Chỉ số nguy cơ do HUFM ước tính từ thời tiết, phục vụ hỗ trợ nghiệp vụ; không thay thế cấp dự báo cháy rừng chính thức.', ...parsed };
+    const value = { source:'Open-Meteo', latitude, longitude, coordinateFallback, timezone:payload.timezone, fetchedAt:new Date().toISOString(), disclaimer:'Chỉ số nguy cơ do HUFM ước tính từ thời tiết, phục vụ hỗ trợ nghiệp vụ; không thay thế cấp dự báo cháy rừng chính thức.', ...parsed };
     weatherCache.set(cacheKey, { expiresAt:Date.now()+WEATHER_CACHE_MINUTES*60*1000, value });
     res.json(value);
   } catch (error) {
@@ -822,7 +905,7 @@ app.post('/api/waypoints', requireAuth, async (req, res) => {
     latitude: lat, longitude: lng, accuracy: Number(req.body.accuracy) || null,
     userId: req.session.user.id, groupId: req.session.user.groupId || null
   });
-  res.status(201).json(wp);
+  await writeAudit(req,'create','waypoint',wp.id,null,wp.toJSON()); res.status(201).json(wp);
 });
 
 app.put('/api/waypoints/:id', requireAuth, async (req, res) => {
@@ -847,7 +930,7 @@ app.post('/api/tracks', requireAuth, async (req, res) => {
   if (points.length < 2) return res.status(400).json({ error: 'Tracklog cần ít nhất 2 điểm.' });
   let distance = 0; for (let i=1;i<points.length;i++) distance += haversine(points[i-1], points[i]);
   const track = await Tracklog.create({ name: (req.body.name || `Track ${new Date().toLocaleString('vi-VN')}`).trim(), description: req.body.description || '', points, distanceMeters: Math.round(distance), startedAt: points[0].time, endedAt: points.at(-1).time, userId: req.session.user.id, groupId: req.session.user.groupId || null });
-  res.status(201).json(track);
+  await writeAudit(req,'create','tracklog',track.id,null,track.toJSON()); res.status(201).json(track);
 });
 
 app.put('/api/tracks/:id', requireAuth, async (req, res) => {

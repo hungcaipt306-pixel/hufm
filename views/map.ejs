@@ -17,6 +17,20 @@
       </div>
     </details>
     <details class="data-panel" open><summary>Dữ liệu hiển thị</summary><div id="dataList" class="data-list"></div></details>
+    <details class="data-panel operations-panel" open>
+      <summary>🛡 Nghiệp vụ hiện trường</summary>
+      <div class="operation-quick-grid">
+        <button id="sosBtn" type="button" class="danger solid-danger">SOS gửi vị trí</button>
+        <a href="/operations" class="button primary">Trung tâm nghiệp vụ</a>
+      </div>
+      <div class="compare-box">
+        <b>So sánh hai tracklog</b>
+        <div class="compare-selects"><select id="compareTrack1"><option value="">Tracklog thứ nhất</option></select><select id="compareTrack2"><option value="">Tracklog thứ hai</option></select></div>
+        <button id="compareTracksBtn" type="button">Hiển thị so sánh</button>
+        <small id="compareResult">Chọn hai tuyến để đối chiếu quãng đường và phạm vi.</small>
+      </div>
+      <div id="assignmentSummary" class="source-note">Đang tải nhiệm vụ được giao…</div>
+    </details>
     <details class="data-panel fire-panel" open>
       <summary>🔥 Thời tiết & nguy cơ cháy rừng</summary>
       <div class="weather-location-row"><span id="weatherLocation">Trung tâm thành phố Huế</span><button id="weatherHereBtn" type="button">Theo vị trí GPS</button></div>
