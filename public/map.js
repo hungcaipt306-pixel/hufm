@@ -13,7 +13,26 @@ const waypointLayer = L.layerGroup().addTo(map);
 const trackLayer = L.layerGroup().addTo(map);
 const fireAlertLayer = L.layerGroup().addTo(map);
 const uploadedLayers = new Map();
-const layerControl = L.control.layers({ 'Đường phố': streetLayer, 'Địa hình & bình độ': topoLayer }, { Waypoint: waypointLayer, Tracklog: trackLayer, 'Cảnh báo cháy rừng': fireAlertLayer }, { collapsed: false }).addTo(map);
+const layerControl = L.control.layers(
+  { 'Đường phố': streetLayer, 'Địa hình & bình độ': topoLayer },
+  { Waypoint: waypointLayer, Tracklog: trackLayer, 'Cảnh báo cháy rừng': fireAlertLayer },
+  { collapsed: true, position: 'topleft' }
+).addTo(map);
+
+// Bảng lớp thu gọn ở mép trái: chạm để mở danh sách có thanh cuộn.
+const layerControlEl = layerControl.getContainer();
+layerControlEl.classList.add('hufm-compact-layer-control');
+const layerToggleEl = layerControlEl.querySelector('.leaflet-control-layers-toggle');
+if (layerToggleEl) {
+  layerToggleEl.title = 'Mở danh sách lớp bản đồ';
+  layerToggleEl.setAttribute('aria-label', 'Mở danh sách lớp bản đồ');
+}
+layerControlEl.addEventListener('mouseenter', () => {}, { passive: true });
+map.on('click', () => {
+  if (layerControlEl.classList.contains('leaflet-control-layers-expanded')) {
+    layerControl.collapse();
+  }
+});
 let currentPosition = null;
 let currentMarker = null;
 let accuracyCircle = null;
@@ -361,6 +380,39 @@ document.getElementById('layerUploadForm').addEventListener('submit', async even
 Promise.all([loadData(), loadLayers()]).catch(e => status(e.message));
 
 
+
+let weatherCoords = { latitude:16.4637, longitude:107.5909 };
+function fmtNumber(value, digits=0){const n=Number(value);return Number.isFinite(n)?n.toLocaleString('vi-VN',{maximumFractionDigits:digits}):'—'}
+function riskAction(level){
+  if(level>=5)return 'Tạm dừng hoạt động dùng lửa; bố trí trực, phương tiện và kiểm tra điểm nóng liên tục.';
+  if(level===4)return 'Hạn chế tuyệt đối nguồn lửa; tăng tuần tra tại khu vực rừng dễ cháy và chuẩn bị lực lượng.';
+  if(level===3)return 'Tăng cảnh giác, kiểm tra vật liệu cháy và nhắc nhở người dân không dùng lửa gần rừng.';
+  if(level===2)return 'Duy trì theo dõi thời tiết và kiểm soát nguồn lửa khi vào rừng.';
+  return 'Nguy cơ khí tượng thấp; vẫn tuân thủ quy định phòng cháy chữa cháy rừng.';
+}
+async function loadFireWeather(useGps=false){
+  const hero=document.getElementById('weatherRiskHero'), now=document.getElementById('weatherNow'), forecast=document.getElementById('weatherForecast'), advice=document.getElementById('weatherAdvice');
+  if(useGps){
+    if(!currentPosition){status('Chưa có vị trí GPS. Hãy bấm Định vị trước.');return;}
+    weatherCoords={latitude:currentPosition.lat,longitude:currentPosition.lng};
+    document.getElementById('weatherLocation').textContent=`Vị trí hiện tại ${weatherCoords.latitude.toFixed(4)}, ${weatherCoords.longitude.toFixed(4)}`;
+  }
+  hero.innerHTML='<b>Đang phân tích thời tiết và nguy cơ…</b>';
+  try{
+    const data=await api(`/api/fire-weather?latitude=${weatherCoords.latitude}&longitude=${weatherCoords.longitude}`);
+    const today=data.forecast?.[0], current=data.current||{};
+    if(!today)throw new Error('Nguồn thời tiết chưa có dữ liệu dự báo.');
+    hero.style.setProperty('--risk-color',today.risk.color); hero.innerHTML=`<span class="risk-level">${esc(today.risk.label)}</span><strong>${today.risk.score}/100</strong>`;
+    now.innerHTML=`<div><b>${fmtNumber(current.temperature_2m,1)}°C</b><small>Nhiệt độ</small></div><div><b>${fmtNumber(current.relative_humidity_2m)}%</b><small>Độ ẩm</small></div><div><b>${fmtNumber(current.wind_speed_10m,1)} km/h</b><small>Gió</small></div><div><b>${fmtNumber(data.recentRain24h,1)} mm</b><small>Mưa 24 giờ</small></div>`;
+    forecast.innerHTML=(data.forecast||[]).slice(0,4).map((d,i)=>`<article style="--risk-color:${d.risk.color}"><b>${i===0?'Hôm nay':new Date(d.date+'T00:00:00').toLocaleDateString('vi-VN',{weekday:'short'})}</b><span>${esc(d.weatherText)}</span><strong>${d.risk.level}/5</strong><small>${fmtNumber(d.maxTemp)}° • RH ${fmtNumber(d.minHumidity)}% • mưa ${fmtNumber(d.rainSum,1)}mm</small></article>`).join('');
+    advice.innerHTML=`<b>Khuyến nghị:</b> ${esc(riskAction(today.risk.level))}<br><small>Yếu tố chính: ${esc(today.risk.reasons.join(', '))}. Cập nhật ${new Date(data.fetchedAt).toLocaleString('vi-VN')} • ${esc(data.source)}${data.cached?' • cache':''}</small>`;
+    document.getElementById('weatherDisclaimer').textContent=data.disclaimer;
+  }catch(e){hero.innerHTML=`<b>Không tải được thời tiết</b><small>${esc(e.message)}</small>`;now.innerHTML='';forecast.innerHTML='';advice.textContent='Dữ liệu cũ trên bản đồ vẫn có thể tiếp tục sử dụng khi offline.';}
+}
+document.getElementById('refreshWeatherBtn').addEventListener('click',()=>loadFireWeather(false));
+document.getElementById('weatherHereBtn').addEventListener('click',()=>loadFireWeather(true));
+loadFireWeather(false);
+
 async function loadHueWards() {
   const select = document.getElementById('fireWard');
   try {
@@ -385,10 +437,15 @@ function firePopup(properties = {}) {
 async function loadFireAlerts() {
   const statusBox = document.getElementById('fireStatus');
   const wardCode = document.getElementById('fireWard').value;
-  statusBox.textContent = 'Đang tải cảnh báo cháy rừng…';
+  statusBox.textContent = 'Đang tải cảnh báo và điểm nóng vệ tinh…';
   fireAlertLayer.clearLayers();
-  try {
-    const data = await api(`/api/fire-alerts${wardCode ? `?ward_code=${encodeURIComponent(wardCode)}` : ''}`);
+  const b=map.getBounds();
+  const pcccrUrl=`/api/fire-alerts${wardCode ? `?ward_code=${encodeURIComponent(wardCode)}` : ''}`;
+  const firmsUrl=`/api/fire-hotspots?west=${b.getWest().toFixed(4)}&south=${b.getSouth().toFixed(4)}&east=${b.getEast().toFixed(4)}&north=${b.getNorth().toFixed(4)}`;
+  const [officialResult,firmsResult]=await Promise.allSettled([api(pcccrUrl),api(firmsUrl)]);
+  let officialCount=0, firmsCount=0, messages=[];
+  if(officialResult.status==='fulfilled'){
+    const data=officialResult.value;
     document.getElementById('openPcccrBtn').href = data.sourceUrl || 'https://v2.pcccr.vn/diem-chay';
     const geojson = data.geojson || { type:'FeatureCollection', features:[] };
     const rendered = L.geoJSON(geojson, {
@@ -396,15 +453,14 @@ async function loadFireAlerts() {
       style: { color:'#e53935', weight:3, fillColor:'#ff7043', fillOpacity:.3 },
       onEachFeature: (feature, layer) => layer.bindPopup(firePopup(feature.properties || {}))
     });
-    rendered.eachLayer(layer => fireAlertLayer.addLayer(layer));
-    const count = geojson.features?.length || 0;
-    statusBox.textContent = data.configured
-      ? `Đã cập nhật ${count} cảnh báo/điểm cháy lúc ${new Date(data.fetchedAt).toLocaleString('vi-VN')}.`
-      : data.message;
-    if (count && rendered.getBounds().isValid()) map.fitBounds(rendered.getBounds(), { padding:[30,30], maxZoom:15 });
-  } catch (e) {
-    statusBox.textContent = `${e.message} Hãy dùng nút “Mở bản đồ PCCCR” để xem nguồn chính thức.`;
+    rendered.eachLayer(layer => fireAlertLayer.addLayer(layer)); officialCount=geojson.features?.length||0;
+    if(!data.configured&&data.message)messages.push(data.message);
+  }else messages.push('Không kết nối được nguồn PCCCR.');
+  if(firmsResult.status==='fulfilled'){
+    const data=firmsResult.value; const features=data.features||[]; firmsCount=features.length;
+    if(data.configured){L.geoJSON({type:'FeatureCollection',features},{pointToLayer:(_f,ll)=>L.circleMarker(ll,{radius:7,color:'#fff',weight:2,fillColor:'#ff6d00',fillOpacity:.9}),onEachFeature:(f,l)=>l.bindPopup(`<b>Điểm nóng vệ tinh</b><br>Ngày: ${esc(f.properties.acq_date||'—')} ${esc(f.properties.acq_time||'')}<br>Độ tin cậy: ${esc(f.properties.confidence||'—')}<br>FRP: ${esc(f.properties.frp||'—')}<br><small>Nguồn: NASA FIRMS</small>`)}).eachLayer(l=>fireAlertLayer.addLayer(l));}
   }
+  statusBox.textContent=`PCCCR: ${officialCount} điểm • NASA FIRMS: ${firmsCount} điểm${messages.length?' • '+messages.join(' '):''}`;
 }
 document.getElementById('refreshFireBtn').addEventListener('click', loadFireAlerts);
 document.getElementById('fireWard').addEventListener('change', loadFireAlerts);

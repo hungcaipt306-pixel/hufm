@@ -17,7 +17,16 @@
     </details>
     <details class="data-panel" open><summary>Dữ liệu hiển thị</summary><div id="dataList" class="data-list"></div></details>
     <details class="data-panel fire-panel" open>
-      <summary>🔥 Cảnh báo cháy rừng thành phố Huế</summary>
+      <summary>🔥 Thời tiết & nguy cơ cháy rừng</summary>
+      <div class="weather-location-row"><span id="weatherLocation">Trung tâm thành phố Huế</span><button id="weatherHereBtn" type="button">Theo vị trí GPS</button></div>
+      <div id="weatherRiskHero" class="weather-risk-hero"><b>Đang tải dự báo…</b></div>
+      <div id="weatherNow" class="weather-now"></div>
+      <div id="weatherForecast" class="weather-forecast"></div>
+      <div id="weatherAdvice" class="weather-advice"></div>
+      <button id="refreshWeatherBtn" type="button" class="primary full-button">Làm mới thời tiết & nguy cơ</button>
+      <small id="weatherDisclaimer" class="weather-disclaimer">Chỉ số hỗ trợ nghiệp vụ, không thay thế cấp dự báo chính thức.</small>
+      <hr class="panel-divider">
+      <h4 class="subpanel-title">Điểm cảnh báo/điểm nóng</h4>
       <div class="fire-controls">
         <label>Địa bàn phường/xã<select id="fireWard"><option value="">Toàn thành phố Huế</option></select></label>
         <div class="fire-actions"><button id="refreshFireBtn" type="button" class="primary">Làm mới cảnh báo</button><a id="openPcccrBtn" class="button" href="https://v2.pcccr.vn/diem-chay" target="_blank" rel="noopener noreferrer">Mở bản đồ PCCCR</a></div>

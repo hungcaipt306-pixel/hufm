@@ -118,3 +118,16 @@ Sau khi đăng nhập hoặc mở ứng dụng, người dùng được đưa th
 - Bổ sung Permissions-Policy cho geolocation và cảm biến hướng.
 - Service Worker cache v7 để thay thế tài nguyên cũ.
 - Bổ sung thông báo chi tiết khi người dùng từ chối quyền GPS hoặc thiết bị chưa lấy được vị trí.
+
+
+## Thời tiết và nguy cơ cháy rừng thông minh
+- API mặc định: Open-Meteo, không cần API key.
+- HUFM tính điểm nguy cơ 0-100 và 5 cấp từ nhiệt độ, độ ẩm, gió/gió giật, mưa dự báo và mưa 24 giờ gần nhất.
+- Có dự báo 4 ngày và khuyến nghị nghiệp vụ theo cấp nguy cơ.
+- Người dùng có thể tính theo trung tâm Huế hoặc vị trí GPS hiện tại.
+- Đây là chỉ số hỗ trợ nghiệp vụ, không thay thế cấp dự báo cháy rừng chính thức.
+- Có endpoint tùy chọn `/api/fire-hotspots` dùng NASA FIRMS khi cấu hình `FIRMS_MAP_KEY`.
+
+## Cập nhật giao diện chọn lớp trên điện thoại
+
+Bảng chọn lớp Leaflet được thu gọn thành nút nhỏ ở mép trái bản đồ. Chạm nút để mở danh sách lớp có thanh cuộn; chạm bản đồ để đóng. Các ô radio/checkbox được giới hạn kích thước để không che bản đồ trên iPhone.

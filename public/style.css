@@ -105,3 +105,84 @@
  .map-page .data-panel summary{top:51px}
 }
 .map-load-error{height:100%;min-height:320px;display:grid;place-content:center;text-align:center;padding:24px;background:#eef5f0;color:#8b1e16;font-size:1rem}
+
+.weather-location-row{display:flex;gap:.45rem;align-items:center;justify-content:space-between;margin-bottom:.6rem;font-size:.82rem}.weather-location-row button{padding:.38rem .55rem}.weather-risk-hero{--risk-color:#607d8b;border-left:6px solid var(--risk-color);background:linear-gradient(135deg,color-mix(in srgb,var(--risk-color) 12%,white),#fff);border-radius:.75rem;padding:.7rem .8rem;display:flex;align-items:center;justify-content:space-between;gap:.5rem}.weather-risk-hero strong{font-size:1.35rem;color:var(--risk-color)}.weather-risk-hero small{display:block}.weather-now{display:grid;grid-template-columns:repeat(2,1fr);gap:.45rem;margin:.6rem 0}.weather-now div{background:#f4f7f3;border-radius:.65rem;padding:.55rem}.weather-now b,.weather-now small{display:block}.weather-now small{font-size:.72rem;color:#5d6d62}.weather-forecast{display:grid;grid-template-columns:repeat(2,1fr);gap:.45rem}.weather-forecast article{--risk-color:#607d8b;border-top:4px solid var(--risk-color);background:#fff;border-radius:.65rem;padding:.5rem;box-shadow:0 1px 5px #0001}.weather-forecast article>*{display:block}.weather-forecast article span,.weather-forecast article small{font-size:.72rem;color:#5d6d62}.weather-forecast article strong{color:var(--risk-color)}.weather-advice{margin:.6rem 0;padding:.65rem;border-radius:.65rem;background:#fff8e1;font-size:.84rem}.weather-advice small{color:#655}.weather-disclaimer{display:block;margin-top:.5rem;color:#5d6d62}.full-button{width:100%}.panel-divider{border:0;border-top:1px solid #dce4dd;margin:.8rem 0}.subpanel-title{margin:.2rem 0 .55rem}@media(max-width:430px){.weather-forecast{grid-template-columns:1fr 1fr}.weather-location-row{align-items:flex-start}.weather-location-row span{max-width:55%}}
+
+/* HUFM: bảng chọn lớp nhỏ gọn ở mép trái, tối ưu cho màn hình điện thoại */
+.hufm-compact-layer-control.leaflet-control-layers{
+  width:auto;
+  max-width:min(238px,calc(100vw - 84px));
+  border:1px solid rgba(13,75,52,.16)!important;
+  border-radius:12px!important;
+  background:rgba(255,255,255,.97)!important;
+  box-shadow:0 5px 18px rgba(0,0,0,.18)!important;
+  overflow:hidden;
+}
+.hufm-compact-layer-control .leaflet-control-layers-toggle{
+  width:42px!important;
+  height:42px!important;
+  background-size:22px 22px!important;
+  border-radius:11px;
+}
+.hufm-compact-layer-control.leaflet-control-layers-expanded{
+  padding:8px 9px!important;
+}
+.hufm-compact-layer-control .leaflet-control-layers-list{
+  width:210px;
+  max-width:calc(100vw - 108px);
+  max-height:46dvh;
+  overflow-y:auto;
+  overflow-x:hidden;
+  overscroll-behavior:contain;
+  scrollbar-width:thin;
+  padding-right:3px;
+}
+.hufm-compact-layer-control .leaflet-control-layers-base,
+.hufm-compact-layer-control .leaflet-control-layers-overlays{
+  display:grid;
+  gap:2px;
+}
+.hufm-compact-layer-control .leaflet-control-layers-separator{
+  margin:6px 0;
+}
+.hufm-compact-layer-control label{
+  display:block!important;
+  margin:0!important;
+  padding:5px 4px!important;
+  border-radius:7px;
+  font-size:.78rem!important;
+  line-height:1.22!important;
+  font-weight:650;
+  white-space:normal;
+  cursor:pointer;
+}
+.hufm-compact-layer-control label:hover{
+  background:#eef6f1;
+}
+.hufm-compact-layer-control label > span{
+  display:flex;
+  align-items:flex-start;
+  gap:7px;
+}
+.hufm-compact-layer-control input[type="radio"],
+.hufm-compact-layer-control input[type="checkbox"]{
+  appearance:auto!important;
+  -webkit-appearance:auto!important;
+  width:16px!important;
+  height:16px!important;
+  min-width:16px!important;
+  min-height:16px!important;
+  margin:1px 0 0!important;
+  padding:0!important;
+  border:0!important;
+  box-shadow:none!important;
+  accent-color:#0d6847;
+  flex:0 0 16px;
+}
+@media(max-width:700px){
+  .leaflet-top.leaflet-left{top:2px;left:2px}
+  .hufm-compact-layer-control.leaflet-control-layers{margin-top:4px!important;margin-left:4px!important}
+  .hufm-compact-layer-control .leaflet-control-layers-toggle{width:38px!important;height:38px!important;background-size:20px 20px!important}
+  .hufm-compact-layer-control .leaflet-control-layers-list{width:188px;max-height:38dvh}
+  .hufm-compact-layer-control label{font-size:.74rem!important;padding:4px 3px!important}
+}

@@ -26,6 +26,11 @@ const PCCCR_API_TOKEN = process.env.PCCCR_API_TOKEN || '';
 const TOPO_TILE_URL = process.env.TOPO_TILE_URL || 'https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png';
 const OFFLINE_TILE_URL = process.env.OFFLINE_TILE_URL || TOPO_TILE_URL;
 const OFFLINE_TILE_MAX = Number(process.env.OFFLINE_TILE_MAX || 1200);
+const WEATHER_API_BASE = process.env.WEATHER_API_BASE || 'https://api.open-meteo.com';
+const WEATHER_CACHE_MINUTES = Math.max(1, Number(process.env.WEATHER_CACHE_MINUTES || 10));
+const FIRMS_MAP_KEY = process.env.FIRMS_MAP_KEY || '';
+const FIRMS_SOURCE = process.env.FIRMS_SOURCE || 'VIIRS_SNPP_NRT';
+const weatherCache = new Map();
 
 async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 15000) {
   const controller = new AbortController();
@@ -36,6 +41,64 @@ async function fetchJsonWithTimeout(url, options = {}, timeoutMs = 15000) {
     return await response.json();
   } finally { clearTimeout(timer); }
 }
+
+function clamp(value, min, max) { return Math.max(min, Math.min(max, value)); }
+function weatherRiskLevel(score) {
+  if (score >= 80) return { level: 5, label: 'Cấp V - Cực kỳ nguy hiểm', color: '#7f0000' };
+  if (score >= 65) return { level: 4, label: 'Cấp IV - Nguy hiểm', color: '#d32f2f' };
+  if (score >= 45) return { level: 3, label: 'Cấp III - Cao', color: '#f57c00' };
+  if (score >= 25) return { level: 2, label: 'Cấp II - Trung bình', color: '#fbc02d' };
+  return { level: 1, label: 'Cấp I - Thấp', color: '#388e3c' };
+}
+function calculateFireWeatherRisk({ maxTemp, minHumidity, maxWind, maxGust, rainSum, recentRain }) {
+  const tempScore = clamp((Number(maxTemp) - 24) * 2.4, 0, 28);
+  const humidityScore = clamp((60 - Number(minHumidity)) * 0.75, 0, 30);
+  const windScore = clamp(Number(maxWind) * 0.65, 0, 18);
+  const gustScore = clamp((Number(maxGust) - 25) * 0.35, 0, 8);
+  const drynessScore = Number(rainSum) < 0.5 ? 12 : Number(rainSum) < 3 ? 7 : Number(rainSum) < 8 ? 3 : 0;
+  const recentDrynessScore = Number(recentRain) < 1 ? 8 : Number(recentRain) < 5 ? 4 : 0;
+  const score = Math.round(clamp(tempScore + humidityScore + windScore + gustScore + drynessScore + recentDrynessScore, 0, 100));
+  const risk = weatherRiskLevel(score);
+  const reasons = [];
+  if (maxTemp >= 35) reasons.push('nhiệt độ rất cao'); else if (maxTemp >= 32) reasons.push('nhiệt độ cao');
+  if (minHumidity <= 35) reasons.push('độ ẩm rất thấp'); else if (minHumidity <= 50) reasons.push('không khí khô');
+  if (maxWind >= 25 || maxGust >= 40) reasons.push('gió mạnh làm tăng khả năng lan cháy');
+  if (rainSum < 1 && recentRain < 3) reasons.push('ít mưa, vật liệu cháy dễ khô');
+  if (!reasons.length) reasons.push('điều kiện khí tượng chưa cho thấy nguy cơ nổi bật');
+  return { score, ...risk, reasons };
+}
+function weatherCodeText(code) {
+  const map = {0:'Trời quang',1:'Ít mây',2:'Mây rải rác',3:'Nhiều mây',45:'Sương mù',48:'Sương mù đóng băng',51:'Mưa phùn nhẹ',53:'Mưa phùn',55:'Mưa phùn dày',61:'Mưa nhẹ',63:'Mưa vừa',65:'Mưa lớn',80:'Mưa rào nhẹ',81:'Mưa rào',82:'Mưa rào mạnh',95:'Dông',96:'Dông kèm mưa đá',99:'Dông mạnh kèm mưa đá'};
+  return map[Number(code)] || 'Thời tiết biến đổi';
+}
+function parseOpenMeteo(payload) {
+  const h = payload.hourly || {}, times = h.time || [];
+  const nowMs = Date.now();
+  const rows = times.map((time, i) => ({
+    time, ms: new Date(time).getTime(),
+    temperature: Number(h.temperature_2m?.[i]), humidity: Number(h.relative_humidity_2m?.[i]),
+    precipitation: Number(h.precipitation?.[i] || 0), wind: Number(h.wind_speed_10m?.[i] || 0),
+    gust: Number(h.wind_gusts_10m?.[i] || 0), weatherCode: Number(h.weather_code?.[i])
+  })).filter(r => Number.isFinite(r.ms));
+  const recent = rows.filter(r => r.ms >= nowMs - 24*3600e3 && r.ms <= nowMs);
+  const recentRain = recent.reduce((a,r)=>a+(r.precipitation||0),0);
+  const days = [];
+  for (let d=0; d<4; d++) {
+    const start = new Date(); start.setHours(0,0,0,0); start.setDate(start.getDate()+d);
+    const end = new Date(start); end.setDate(end.getDate()+1);
+    const dayRows = rows.filter(r => r.ms >= start.getTime() && r.ms < end.getTime());
+    if (!dayRows.length) continue;
+    const maxTemp = Math.max(...dayRows.map(r=>r.temperature).filter(Number.isFinite));
+    const minHumidity = Math.min(...dayRows.map(r=>r.humidity).filter(Number.isFinite));
+    const maxWind = Math.max(...dayRows.map(r=>r.wind).filter(Number.isFinite));
+    const maxGust = Math.max(...dayRows.map(r=>r.gust).filter(Number.isFinite));
+    const rainSum = dayRows.reduce((a,r)=>a+(r.precipitation||0),0);
+    const noon = dayRows.reduce((best,r)=>Math.abs(new Date(r.time).getHours()-12)<Math.abs(new Date(best.time).getHours()-12)?r:best,dayRows[0]);
+    days.push({ date:start.toISOString().slice(0,10), maxTemp, minHumidity, maxWind, maxGust, rainSum:Number(rainSum.toFixed(1)), weatherCode:noon.weatherCode, weatherText:weatherCodeText(noon.weatherCode), risk:calculateFireWeatherRisk({maxTemp,minHumidity,maxWind,maxGust,rainSum,recentRain}) });
+  }
+  return { current: payload.current || null, recentRain24h:Number(recentRain.toFixed(1)), forecast:days };
+}
+
 function normalizeFireAlerts(payload) {
   if (!payload) return { type: 'FeatureCollection', features: [] };
   if (payload.type === 'FeatureCollection' && Array.isArray(payload.features)) return payload;
@@ -339,6 +402,48 @@ app.get('/api/admin-units/hue', requireAuth, async (req, res) => {
     console.error('Không tải được đơn vị hành chính Huế:', error.message);
     res.status(502).json({ error: 'Không tải được danh sách phường/xã từ 34tinhthanh.com.', wards: [] });
   }
+});
+
+
+app.get('/api/fire-weather', requireAuth, async (req, res) => {
+  const latitude = Number(req.query.latitude || 16.4637);
+  const longitude = Number(req.query.longitude || 107.5909);
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude) || Math.abs(latitude) > 90 || Math.abs(longitude) > 180) return res.status(400).json({ error: 'Tọa độ thời tiết không hợp lệ.' });
+  const roundedLat = latitude.toFixed(3), roundedLng = longitude.toFixed(3);
+  const cacheKey = `${roundedLat},${roundedLng}`;
+  const cached = weatherCache.get(cacheKey);
+  if (cached && cached.expiresAt > Date.now()) return res.json({ ...cached.value, cached: true });
+  try {
+    const url = new URL('/v1/forecast', WEATHER_API_BASE);
+    url.searchParams.set('latitude', roundedLat); url.searchParams.set('longitude', roundedLng);
+    url.searchParams.set('timezone', 'Asia/Bangkok'); url.searchParams.set('past_days', '1'); url.searchParams.set('forecast_days', '4');
+    url.searchParams.set('current', 'temperature_2m,relative_humidity_2m,apparent_temperature,precipitation,weather_code,wind_speed_10m,wind_direction_10m,wind_gusts_10m');
+    url.searchParams.set('hourly', 'temperature_2m,relative_humidity_2m,precipitation,weather_code,wind_speed_10m,wind_gusts_10m');
+    const payload = await fetchJsonWithTimeout(url.toString(), { headers: { Accept: 'application/json', 'User-Agent': 'HUFM/1.1' } }, 18000);
+    const parsed = parseOpenMeteo(payload);
+    const value = { source:'Open-Meteo', latitude, longitude, timezone:payload.timezone, fetchedAt:new Date().toISOString(), disclaimer:'Chỉ số nguy cơ do HUFM ước tính từ thời tiết, phục vụ hỗ trợ nghiệp vụ; không thay thế cấp dự báo cháy rừng chính thức.', ...parsed };
+    weatherCache.set(cacheKey, { expiresAt:Date.now()+WEATHER_CACHE_MINUTES*60*1000, value });
+    res.json(value);
+  } catch (error) {
+    console.error('Không tải được thời tiết:', error.message);
+    res.status(502).json({ error:'Không thể tải dữ liệu thời tiết. Vui lòng thử lại khi có mạng.' });
+  }
+});
+
+app.get('/api/fire-hotspots', requireAuth, async (req, res) => {
+  if (!FIRMS_MAP_KEY) return res.json({ configured:false, source:'NASA FIRMS', message:'Chưa cấu hình FIRMS_MAP_KEY.', features:[] });
+  const west=Number(req.query.west||107.0), south=Number(req.query.south||15.8), east=Number(req.query.east||108.4), north=Number(req.query.north||16.9);
+  try {
+    const area=`${west},${south},${east},${north}`;
+    const url=`https://firms.modaps.eosdis.nasa.gov/api/area/csv/${encodeURIComponent(FIRMS_MAP_KEY)}/${encodeURIComponent(FIRMS_SOURCE)}/${area}/2`;
+    const controller=new AbortController(); const timer=setTimeout(()=>controller.abort(),18000);
+    const response=await fetch(url,{signal:controller.signal,headers:{'User-Agent':'HUFM/1.1'}}); clearTimeout(timer);
+    if(!response.ok) throw new Error(`NASA FIRMS HTTP ${response.status}`);
+    const text=await response.text(); const lines=text.trim().split(/\r?\n/); if(lines.length<2) return res.json({configured:true,source:'NASA FIRMS',features:[],fetchedAt:new Date().toISOString()});
+    const headers=lines[0].split(','); const idx=n=>headers.indexOf(n); const features=[];
+    for(const line of lines.slice(1)){const c=line.split(','); const lat=Number(c[idx('latitude')]),lng=Number(c[idx('longitude')]); if(!Number.isFinite(lat)||!Number.isFinite(lng))continue; features.push({type:'Feature',geometry:{type:'Point',coordinates:[lng,lat]},properties:{source:'NASA FIRMS',confidence:c[idx('confidence')],acq_date:c[idx('acq_date')],acq_time:c[idx('acq_time')],frp:c[idx('frp')],satellite:c[idx('satellite')]}})}
+    res.json({configured:true,source:'NASA FIRMS',features,fetchedAt:new Date().toISOString()});
+  } catch(error){console.error('NASA FIRMS:',error.message);res.status(502).json({error:'Không thể tải điểm nóng vệ tinh NASA FIRMS.',features:[]});}
 });
 
 app.get('/api/fire-alerts', requireAuth, async (req, res) => {
