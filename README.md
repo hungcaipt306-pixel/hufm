@@ -187,3 +187,9 @@ Phiên bản này không phụ thuộc Google Maps. Các lớp nền mặc đị
 - Nhãn trên ảnh vệ tinh: lớp nhãn trong suốt CARTO dựa trên dữ liệu OpenStreetMap.
 
 Ứng dụng không yêu cầu Google Maps API key.
+
+## Lớp bản đồ Việt Nam, Hoàng Sa và Trường Sa
+
+Phiên bản này bổ sung lớp phủ `Bản đồ Việt Nam (Hoàng Sa, Trường Sa)` được bật mặc định. Nút `🇻🇳 Việt Nam` trên bản đồ đưa nhanh về toàn cảnh lãnh thổ đất liền và hai vùng biển đảo. Ranh giới đất liền được khái quát hóa để hiển thị; các khung Hoàng Sa và Trường Sa là vùng vị trí tham khảo, không dùng cho đo đạc hoặc xác định ranh giới pháp lý.
+
+Nguồn tham khảo dữ liệu: Natural Earth (đường bao đất liền khái quát) và kho Vietnam GIS Data của Nguyễn Duy Liêm về bộ dữ liệu hành chính Việt Nam có Hoàng Sa, Trường Sa.

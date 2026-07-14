@@ -300,3 +300,11 @@
 .csv-upload-form{gap:12px!important}.csv-note{margin:14px 0 0;padding:11px 12px;background:#f4f8f6;border:1px solid #dde9e2;border-radius:10px;color:#52665b;font-size:.84rem}
 .import-report{margin-bottom:20px;max-height:none!important}.import-errors{max-height:260px;overflow:auto;border:1px solid var(--border);border-radius:10px}.import-errors table{min-width:620px}.import-errors th{position:sticky;top:0;z-index:1}
 @media(max-width:900px){.admin-user-tools{grid-template-columns:1fr}.admin-account-form{grid-template-columns:1fr!important}.wide-field{grid-column:auto}}
+
+
+/* Lớp bản đồ Việt Nam, Hoàng Sa và Trường Sa */
+.vn-national-label-wrap{background:transparent;border:0;pointer-events:none}
+.vn-national-label{transform:translate(-50%,-50%);white-space:nowrap;background:rgba(255,255,255,.94);border:1px solid rgba(215,25,32,.55);border-radius:10px;padding:5px 8px;box-shadow:0 4px 14px rgba(0,0,0,.16);color:#b5121b;text-align:center;font-size:12px;line-height:1.15}
+.vn-national-label b{display:block;font-weight:800}
+.vn-national-label small{display:block;color:#334155;font-size:10px;margin-top:2px}
+@media(max-width:640px){.vn-national-label{font-size:10px;padding:4px 6px}.vn-national-label small{font-size:9px}}

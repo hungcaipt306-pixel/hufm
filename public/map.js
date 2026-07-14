@@ -39,13 +39,14 @@ setTimeout(()=>{map.invalidateSize(true);if(document.querySelector('.leaflet-til
 const waypointLayer = L.layerGroup().addTo(map);
 const trackLayer = L.layerGroup().addTo(map);
 const fireAlertLayer = L.layerGroup().addTo(map);
+const vietnamNationalLayer = L.layerGroup().addTo(map);
 const uploadedLayers = new Map();
 const baseLayers={
   'Đường phố (OpenStreetMap)':streetLayer,
   'Địa hình & bình độ':topoLayer,
   'Vệ tinh + nhãn OSM':satelliteLayer
 };
-const overlayLayers={Waypoint:waypointLayer,Tracklog:trackLayer,'Cảnh báo cháy rừng':fireAlertLayer,'Nhãn OpenStreetMap':labelsLayer};
+const overlayLayers={Waypoint:waypointLayer,Tracklog:trackLayer,'Cảnh báo cháy rừng':fireAlertLayer,'Bản đồ Việt Nam (Hoàng Sa, Trường Sa)':vietnamNationalLayer,'Nhãn OpenStreetMap':labelsLayer};
 const layerControl = L.control.layers(
   baseLayers,
   overlayLayers,
@@ -56,6 +57,47 @@ map.on('baselayerchange',event=>{
   if(event.layer!==satelliteLayer&&map.hasLayer(labelsLayer))map.removeLayer(labelsLayer);
   setTimeout(()=>map.invalidateSize(false),80);
 });
+
+
+function vietnamLabelIcon(title, subtitle='') {
+  return L.divIcon({
+    className: 'vn-national-label-wrap',
+    html: `<div class="vn-national-label"><b>${esc(title)}</b>${subtitle ? `<small>${esc(subtitle)}</small>` : ''}</div>`,
+    iconSize: null,
+    iconAnchor: [0, 0]
+  });
+}
+async function loadVietnamNationalReference() {
+  try {
+    const response = await fetch('/data/vietnam-national-reference.geojson', { cache: 'no-store' });
+    if (!response.ok) throw new Error('Không tải được dữ liệu bản đồ Việt Nam');
+    const data = await response.json();
+    vietnamNationalLayer.clearLayers();
+    const rendered = L.geoJSON(data, {
+      style: feature => feature?.properties?.kind === 'archipelago'
+        ? { color:'#d71920', weight:2, dashArray:'7 5', fillColor:'#d71920', fillOpacity:0.06 }
+        : { color:'#d71920', weight:2, fillColor:'#ffdf00', fillOpacity:0.035 },
+      onEachFeature: (feature, layer) => {
+        const p = feature.properties || {};
+        layer.bindPopup(`<b>${esc(p.name || 'Việt Nam')}</b>${p.subtitle ? `<br>${esc(p.subtitle)}` : ''}<br><small>${esc(p.note || '')}</small>`);
+        if (p.kind === 'archipelago' && layer.getBounds) {
+          const center = layer.getBounds().getCenter();
+          L.marker(center, { icon: vietnamLabelIcon(p.name, p.subtitle), interactive:false, keyboard:false }).addTo(vietnamNationalLayer);
+        }
+      }
+    });
+    rendered.eachLayer(layer => vietnamNationalLayer.addLayer(layer));
+  } catch (error) {
+    console.warn('Không tải được lớp bản đồ Việt Nam:', error);
+    status('Không tải được lớp Việt Nam; các lớp nền vẫn hoạt động.');
+  }
+}
+function showVietnamOverview() {
+  if (!map.hasLayer(vietnamNationalLayer)) vietnamNationalLayer.addTo(map);
+  map.fitBounds([[6.0, 102.0], [23.8, 117.8]], { padding:[18,18] });
+  status('Đang hiển thị toàn cảnh Việt Nam, Hoàng Sa và Trường Sa.');
+}
+window.showVietnamOverview = showVietnamOverview;
 
 // Bảng lớp thu gọn ở mép trái: chạm để mở danh sách có thanh cuộn.
 const layerControlEl = layerControl.getContainer();
@@ -71,6 +113,7 @@ map.on('click', () => {
     layerControl.collapse();
   }
 });
+loadVietnamNationalReference();
 let currentPosition = null;
 let currentMarker = null;
 let accuracyCircle = null;
@@ -546,3 +589,6 @@ navigator.serviceWorker?.addEventListener('message',e=>{const d=e.data||{},box=d
 (async()=>{try{appConfig=await api('/api/app-config');topoLayer.setUrl(appConfig.topoTileUrl);}catch(_){ }await updateNetworkUI();if(navigator.onLine)syncPending();})();
 
 setTimeout(() => map.invalidateSize(true), 350);
+
+const vietnamOverviewBtn=document.getElementById('vietnamOverviewBtn');
+if(vietnamOverviewBtn)vietnamOverviewBtn.addEventListener('click',showVietnamOverview);
