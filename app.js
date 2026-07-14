@@ -133,7 +133,23 @@ const sequelize = process.env.DATABASE_URL
 
 const User = sequelize.define('User', {
   name: { type: DataTypes.STRING, allowNull: false },
-  email: { type: DataTypes.STRING, allowNull: false, unique: true, validate: { isEmail: true } },
+  // Giữ tên cột email để tương thích cơ sở dữ liệu cũ, nhưng giá trị có thể là
+  // email thật hoặc định danh nội bộ username@hufm.local. Không dùng isEmail vì
+  // validator của Sequelize từ chối tên miền .local và làm ứng dụng dừng khi khởi động.
+  email: {
+    type: DataTypes.STRING,
+    allowNull: false,
+    unique: true,
+    validate: {
+      notEmpty: true,
+      isLoginKey(value) {
+        const text = String(value || '').trim().toLowerCase();
+        if (!text || !/^[^\s@]+@[^\s@]+$/.test(text)) {
+          throw new Error('Tên đăng nhập không hợp lệ.');
+        }
+      }
+    }
+  },
   passwordHash: { type: DataTypes.STRING, allowNull: false },
   phone: DataTypes.STRING,
   unit: DataTypes.STRING,
@@ -1082,9 +1098,32 @@ async function bootstrap() {
   await sequelize.authenticate();
   await sequelize.sync();
   await sessionStore.sync();
-  const email = (process.env.ADMIN_EMAIL || 'admin@kiemlamhue.gov.vn').toLowerCase();
-  const [admin, created] = await User.findOrCreate({ where:{email}, defaults:{ name:process.env.ADMIN_NAME || 'Quản trị hệ thống', passwordHash:await bcrypt.hash(process.env.ADMIN_PASSWORD || 'ChangeMe123!',12), role:'admin', status:'approved' } });
-  if (!created && (admin.role !== 'admin' || admin.status !== 'approved')) await admin.update({role:'admin',status:'approved'});
+  // ADMIN_EMAIL vẫn được hỗ trợ để tương thích cấu hình cũ. Nếu người quản trị
+  // nhập chỉ một tên đăng nhập (ví dụ: admin), tự đổi thành admin@hufm.local.
+  const adminLoginInput = process.env.ADMIN_USERNAME || process.env.ADMIN_EMAIL || 'admin@kiemlamhue.gov.vn';
+  const email = loginKeyToEmail(adminLoginInput);
+  if (!email) throw new Error('ADMIN_USERNAME hoặc ADMIN_EMAIL không hợp lệ.');
+  const configuredAdminPassword = String(process.env.ADMIN_PASSWORD || 'ChangeMe123!');
+  const [admin, created] = await User.findOrCreate({
+    where:{email},
+    defaults:{
+      name:process.env.ADMIN_NAME || 'Quản trị hệ thống',
+      passwordHash:await bcrypt.hash(configuredAdminPassword,12),
+      role:'admin',
+      status:'approved'
+    }
+  });
+  if (!created) {
+    const updates = {};
+    if (admin.role !== 'admin') updates.role = 'admin';
+    if (admin.status !== 'approved') updates.status = 'approved';
+    // ADMIN_PASSWORD trên Render là nguồn mật khẩu quản trị chính thức.
+    // Đồng bộ lại hash sau mỗi lần deploy để tránh tài khoản admin giữ mật khẩu cũ.
+    if (!(await bcrypt.compare(configuredAdminPassword, admin.passwordHash))) {
+      updates.passwordHash = await bcrypt.hash(configuredAdminPassword, 12);
+    }
+    if (Object.keys(updates).length) await admin.update(updates);
+  }
   app.listen(PORT, () => console.log(`Hue Forest Manager running on port ${PORT}`));
 }
 bootstrap().catch(err => { console.error('Startup failed:', err); process.exit(1); });

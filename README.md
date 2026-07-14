@@ -209,3 +209,19 @@ Phiên bản này thay các sự kiện `onclick` nội tuyến bằng event del
 - Không còn ghi đè URL tile proxy bằng URL OpenTopoMap trực tiếp.
 - Không đặt crossOrigin cho ảnh tile, tương thích Safari/PWA.
 - Tự chuyển sang nguồn OpenTopoMap trực tiếp nếu proxy địa hình lỗi nhiều lần.
+
+## Sửa lỗi khởi động Render: Validation isEmail
+
+Trường đăng nhập hỗ trợ cả email cũ và tên đăng nhập mới. Tên đăng nhập được lưu nội bộ dưới dạng `username@hufm.local`, vì vậy mô hình không còn sử dụng validator `isEmail` của Sequelize. Có thể cấu hình admin bằng một trong hai cách:
+
+```env
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=mat-khau-manh
+```
+
+hoặc giữ cấu hình cũ:
+
+```env
+ADMIN_EMAIL=admin@kiemlamhue.gov.vn
+ADMIN_PASSWORD=mat-khau-manh
+```
